@@ -1,0 +1,3 @@
+[submodule "ext/libromano"]
+	path = ext/libromano
+	url = https://github.com/romainaugier/libromano
