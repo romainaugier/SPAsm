@@ -80,6 +80,7 @@ def parse_opcode(opcode: str) -> Tuple[str, bool]:
         elif part in ['ib', 'iw', 'id', 'iz']:
             continue
         opcode_bytes.append(f'0x{part}')
+
     return opcode_bytes, needs_modrm
 
 def parse_prefix_and_flags(opcode: str, description: str) -> Tuple[str, str, str, str]:
@@ -114,6 +115,43 @@ def parse_prefix_and_flags(opcode: str, description: str) -> Tuple[str, str, str
 
     return prefix, pp_map.get(pp, "00"), mmmmm_map.get(mmmmm, "00"), flags
 
+def parse_instruction(instr: str) -> Tuple[str, List[str], str, List[List[str]]]:
+    prefix, rest = instr.split(' ', maxsplit=1)
+
+    if prefix.startswith("NP"):
+        prefix = "NONE"
+    elif prefix.startswith("REX"):
+        prefix = "REX"
+    elif prefix.startswith("VEX.128"):
+        prefix = "VEX2"
+    elif prefix.startswith("VEX.256"):
+        prefix = "VEX3"
+    elif prefix.startswith("EVEX"):
+        prefix = "EVEX"
+
+    opcode = list()
+
+    last, rest = rest.split(' ', maxsplit=1)
+
+    while last != "/r":
+        opcode.append(last)
+        last, rest = rest.split(' ', maxsplit=1)
+
+    mnemonic = last
+
+    operands = list()
+
+    operands_str = rest.split(",")
+
+    for operand in operands_str:
+        if "/" in operand:
+            variations = operand.split("/")
+            operands.append(variations[0])
+        else:
+            operands.append(operand)
+
+    return prefix, opcode, mnemonic, [operands]
+
 def scrape_instruction_page(url) -> Optional[List[Dict]]:
     response = requests.get(url)
     soup = BeautifulSoup(response.text, "lxml")
@@ -135,6 +173,7 @@ def scrape_instruction_page(url) -> Optional[List[Dict]]:
 
         if len(tds) == 5:
             opcode_instruction, op_enc, support_mode_32_64, feature_flag, desc = row.find_all("td")
+            prefix, opcode, mnemonic, operands = parse_instruction(opcode_instruction)
         elif len(tds) == 6:
             opcode, instruction, op_enc, support_mode_32_64, feature_flag, desc = row.find_all("td")
 
