@@ -12,10 +12,7 @@
 typedef enum
 {
     SpasmOperandType_None,
-    SpasmOperandType_Register, /* General-purpose register */
-    SpasmOperandType_Scalar,   /* Simd register for scalar operation */
-    SpasmOperandType_Vector,   /* Simd register for vector operation */
-    SpasmOperandType_OPMask,   /* avx512 opmask */
+    SpasmOperandType_Register,
     SpasmOperandType_Mem,
     SpasmOperandType_Imm8,
     SpasmOperandType_Imm16,

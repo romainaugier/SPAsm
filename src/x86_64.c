@@ -59,11 +59,7 @@ size_t spasm_x86_64_get_operand_size(SpasmOperand* operand, size_t default_value
     switch(operand->type)
     {
         case SpasmOperandType_Register:
-        case SpasmOperandType_Scalar:
-        case SpasmOperandType_Vector:
             return spasm_x86_64_get_register_size(operand->reg);
-        case SpasmOperandType_OPMask:
-            return 64;
         case SpasmOperandType_Mem:
             return default_value;
         case SpasmOperandType_Imm8:
@@ -114,9 +110,7 @@ Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info
 
         for(uint8_t i = 0; i < num_operands; i++) 
         {
-            if(operands[i].type == SpasmOperandType_Scalar || 
-               operands[i].type == SpasmOperandType_Vector || 
-               operands[i].type == SpasmOperandType_OPMask) 
+            if(operands[i].type == SpasmOperandType_Register) 
             {
                 SpasmByte code = spasm_x86_64_get_register_code(operands[i].reg);
 
@@ -130,7 +124,7 @@ Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info
                         B = 1;
                 }
 
-                if(operands[i].type == SpasmOperandType_OPMask) 
+                if(spasm_x86_64_get_register_size(operands[i].reg) == Spasm_x86_64_RegisterWidth_OpMask) 
                 {
                     /* TODO: add zeroing support */
                     info.aaa = code & 0x7;
@@ -172,8 +166,7 @@ Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info
 
         for(uint8_t i = 0; i < num_operands; i++) 
         {
-            if(operands[i].type == SpasmOperandType_Scalar ||
-               operands[i].type == SpasmOperandType_Vector) 
+            if(operands[i].type == SpasmOperandType_Register) 
             {
                 SpasmByte code = spasm_x86_64_get_register_code(operands[i].reg);
 
@@ -230,9 +223,7 @@ Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info
 
         for(uint8_t i = 0; i < num_operands; i++) 
         {
-            if(operands[i].type == SpasmOperandType_Register || 
-               operands[i].type == SpasmOperandType_Scalar || 
-               operands[i].type == SpasmOperandType_Vector) 
+            if(operands[i].type == SpasmOperandType_Register) 
             {
                 SpasmByte code = spasm_x86_64_get_register_code(operands[i].reg);
 
@@ -310,25 +301,6 @@ Spasm_x86_64_ModRMSibOffset spasm_x86_64_operands_as_modrm_sib_offset(SpasmOpera
     Spasm_x86_64_ModRMSibOffset result = { 0 };
 
     if(dest->type == SpasmOperandType_Register && src->type == SpasmOperandType_Register)
-    {
-        /* mod=11 (register-direct) */
-        result.modrm = (0x3 << 6) |
-                       (spasm_x86_64_get_rm(dest->reg) << 3) |
-                       spasm_x86_64_get_rm(src->reg);
-        return result;
-    }
-
-    if((dest->type == SpasmOperandType_Scalar || dest->type == SpasmOperandType_Vector) &&
-       (src->type == SpasmOperandType_Scalar || src->type == SpasmOperandType_Vector))
-    {
-        /* mod=11 (register-direct) */
-        result.modrm = (0x3 << 6) |
-                       (spasm_x86_64_get_rm(dest->reg) << 3) |
-                       spasm_x86_64_get_rm(src->reg);
-        return result;
-    }
-
-    if(dest->type == SpasmOperandType_Vector && src->type == SpasmOperandType_OPMask) 
     {
         /* mod=11 (register-direct) */
         result.modrm = (0x3 << 6) |
@@ -439,8 +411,6 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
             {
                 if(instr->operands[j].type != spasm_x86_64_instruction_table[i].operand_types[j] &&
                    !(spasm_x86_64_instruction_table[i].operand_types[j] == SpasmOperandType_Register &&
-                   instr->operands[j].type == SpasmOperandType_Mem) &&
-                   !(spasm_x86_64_instruction_table[i].operand_types[j] == SpasmOperandType_Vector &&
                    instr->operands[j].type == SpasmOperandType_Mem)) 
                 {
                     match = false;
@@ -663,9 +633,6 @@ size_t spasm_x86_64_operand_debug(SpasmOperand* operand, char* fmt_buf, size_t m
     switch(operand->type)
     {
         case SpasmOperandType_Register: 
-        case SpasmOperandType_Scalar: 
-        case SpasmOperandType_Vector: 
-        case SpasmOperandType_OPMask: 
             return (size_t)snprintf(fmt_buf,
                                     max_fmt_sz,
                                     "%s",
