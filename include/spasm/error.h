@@ -10,5 +10,6 @@
 #include "spasm/common.h"
 
 #define spasm_error(str, ...) fprintf(stderr, "spasm ERROR: " str "\n", __VA_ARGS__)
+#define spasm_debug(str, ...) fprintf(stdout, "spasm DEBUG: " str "\n", __VA_ARGS__)
 
 #endif /* !defined(__SPASM_ERROR) */

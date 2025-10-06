@@ -30,10 +30,12 @@ find_package(libromano)
 set(BACKEND_INSTRUCTIONS_FILES "")
 
 if(ENABLE_X86_64)
+    message(STATUS "Building x86_64 backend")
     add_subdirectory(x86_64)
 endif()
 
 if(ENABLE_AARCH64)
+    message(STATUS "Building aarch64 backend")
     add_subdirectory(aarch64)
 endif()
 

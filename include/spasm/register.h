@@ -71,13 +71,13 @@ typedef enum
 
     /* 64-bit */
     SpasmRegister_x86_64_RAX,
-    SpasmRegister_x86_64_RBX,
     SpasmRegister_x86_64_RCX,
     SpasmRegister_x86_64_RDX,
-    SpasmRegister_x86_64_RSI,
-    SpasmRegister_x86_64_RDI,
+    SpasmRegister_x86_64_RBX,
     SpasmRegister_x86_64_RSP,
     SpasmRegister_x86_64_RBP,
+    SpasmRegister_x86_64_RSI,
+    SpasmRegister_x86_64_RDI,
     SpasmRegister_x86_64_R8,
     SpasmRegister_x86_64_R9,
     SpasmRegister_x86_64_R10,

@@ -15,25 +15,25 @@ from opcodes import x86_64
 
 def map_operand_type(opcode_operand: x86_64.Operand) -> str:
     if not opcode_operand:
-        return "SpasmOperandType_None"
+        return "OP_NONE"
     
     if opcode_operand.type == 'k':
-        return "SpasmOperandType_Register"
+        return "OP_REG"
     elif opcode_operand.is_register:
-        return "SpasmOperandType_Register"
+        return "OP_REG"
     elif opcode_operand.is_memory:
-        return "SpasmOperandType_Mem"
+        return "OP_MEM"
     elif opcode_operand.is_immediate:
         if opcode_operand.type == "imm4":
-            return f"SpasmOperandType_Imm8"
+            return f"OP_IMM8"
 
-        return f"SpasmOperandType_{opcode_operand.type.capitalize()}"
+        return f"OP_{opcode_operand.type.upper()}"
     else:
-        return "SpasmOperandType_None"
+        return "OP_NONE"
 
 def parse_operand_types(operands: List[x86_64.Operand]) -> List[str]:
     res = [map_operand_type(op) for op in operands]
-    return res + ["SpasmOperandType_None"] * (4 - len(res))
+    return res + ["OP_NONE"] * (4 - len(res))
 
 def parse_operand_sizes(operands: List[x86_64.Operand]) -> List[str]:
     res = list()
@@ -84,14 +84,14 @@ def parse_opcode(opcode: str) -> Tuple[List[str], bool]:
 def has_prefix(t: Any, l: List[Any]) -> bool:
     return any([isinstance(x, t) for x in l])
 
-def parse_encoding(encoding: x86_64.Encoding) -> Tuple[str, bool, str, str]:
+def parse_encoding(encoding: x86_64.Encoding) -> Tuple[List[str], bool, str, str]:
     # Returns: opcode, needs_modrm, prefix_type, pp
 
-    opcode = None
+    opcode = list()
 
     for component in encoding.components:
         if isinstance(component, x86_64.Opcode):
-            opcode = str(component.byte)
+            opcode.append("0x" + f"{component.byte:02X}")
 
     needs_modrm = has_prefix(x86_64.ModRM, encoding.components)
 
@@ -171,6 +171,7 @@ def generate_c_file(output_c_file_path: str) -> bool:
                 continue
 
             encoding = form.encodings[0]
+
             isa = form.isa_extensions
 
             operand_types = parse_operand_types(operands)
@@ -203,7 +204,17 @@ def generate_c_file(output_c_file_path: str) -> bool:
         f.write("/* Copyright (c) 2025 - Present Romain Augier */\n")
         f.write("/* All rights reserved. */\n")
         f.write("\n")
+        f.write("/* Auto-generated file, don't modify it */\n")
+        f.write("\n")
         f.write("#include \"spasm/x86_64.h\"\n")
+        f.write("\n")
+        f.write("#define OP_NONE SpasmOperandType_None\n")
+        f.write("#define OP_REG SpasmOperandType_Register\n")
+        f.write("#define OP_MEM SpasmOperandType_Mem\n")
+        f.write("#define OP_IMM8 SpasmOperandType_Imm8\n")
+        f.write("#define OP_IMM16 SpasmOperandType_Imm16\n")
+        f.write("#define OP_IMM32 SpasmOperandType_Imm32\n")
+        f.write("#define OP_IMM64 SpasmOperandType_Imm64\n")
         f.write("\n")
         f.write(f"const Spasm_x86_64_InstructionInfo spasm_x86_64_instruction_table[{num_instructions}] = {{\n")
 
