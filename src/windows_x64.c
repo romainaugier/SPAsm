@@ -7,6 +7,8 @@
 #include "spasm/x86_64.h"
 #include "spasm/data.h"
 
+/* JIT Assembler */
+
 bool spasm_windows_x64_jit(SpasmInstructions* instructions, SpasmByteCode* bytecode, SpasmData* data)
 {
     (void)data;

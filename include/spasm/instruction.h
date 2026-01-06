@@ -31,6 +31,11 @@ typedef struct
 SPASM_API SpasmInstructions spasm_instructions_new(void);
 
 /*
+ * Returns NULL if no data operand is found
+ */
+SPASM_API SpasmOperand* spasm_instruction_has_data_operand(SpasmInstruction* instruction);
+
+/*
  * Implementation of the instruction_push_back, use the macro instead
  */
 SPASM_API bool __spasm_instructions_push_back(SpasmInstructions* instructions,

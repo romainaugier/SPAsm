@@ -18,9 +18,9 @@ typedef enum
     SpasmDataType_BSS,
 } SpasmDataType;
 
-typedef uint32_t SpasmDataId;
+typedef const char* SpasmDataId;
 
-#define SPASM_INVALID_DATA_ID 0xFFFFFFFF
+#define SPASM_INVALID_DATA_ID NULL
 
 /*
     rodata: Initialized, read-only data (constants, string literals)
@@ -43,17 +43,13 @@ typedef struct
 
 SPASM_API SpasmData spasm_data_new(void);
 
-SPASM_API SpasmDataId spasm_data_add_bytes(SpasmData* data,
-                                           const char* data_name,
-                                           uint8_t* bytes,
-                                           size_t data_sz,
-                                           SpasmDataType type);
+SPASM_API void spasm_data_add_bytes(SpasmData* data,
+                                    const char* data_name,
+                                    uint8_t* bytes,
+                                    size_t data_sz,
+                                    SpasmDataType type);
 
-/*
-    Returns the id of the data
-    Must be used in the SpasmData Operand type
-*/
-SPASM_API uint64_t spasm_data_get_id(SpasmData* data, const char* data_name);
+SPASM_API uintptr_t spasm_data_get_jit_address(SpasmData* data, SpasmDataId data_name);
 
 SPASM_API void spasm_data_destroy(SpasmData* data);
 

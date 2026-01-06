@@ -46,7 +46,7 @@ typedef struct
     };
 
     union {
-        uint32_t data_id;
+        const char* data_id;
     };
 
     union {
@@ -96,7 +96,7 @@ typedef struct
 
 #define SpasmData(id) ((SpasmOperand){ \
     .type = SpasmOperandType_Data,     \
-    .data_id = (uint32_t)(id)})
+    .data_id = (const char*)(id)})
 
  #define SpasmSymbol(name) ((SpasmOperand){ \
      .type = SpasmOperandType_Symbol,       \

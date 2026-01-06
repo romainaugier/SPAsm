@@ -33,6 +33,19 @@ SpasmInstructions spasm_instructions_new(void)
     return instructions;
 }
 
+SpasmOperand* spasm_instruction_has_data_operand(SpasmInstruction* instruction)
+{
+    for(uint8_t i = 0; i < instruction->num_operands; i++)
+    {
+        SpasmOperand* operand = &instruction->operands[i];
+
+        if(operand->type == SpasmOperandType_Data)
+            return operand;
+    }
+
+    return NULL;
+}
+
 void spasm_instructions_destroy(SpasmInstructions* instructions)
 {
     vector_release(&instructions->instructions);

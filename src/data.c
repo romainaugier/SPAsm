@@ -5,8 +5,8 @@
 #include "spasm/data.h"
 
 #include "libromano/hashmap.h"
-#include "libromano/hash.h"
 
+#include <stdint.h>
 #include <string.h>
 
 SpasmData spasm_data_new(void)
@@ -19,16 +19,11 @@ SpasmData spasm_data_new(void)
     return data;
 }
 
-SpasmDataId spasm_data_id_from_string(const char* name, uint32_t name_sz)
-{
-    return hash_murmur3(name, (size_t)name_sz, 0x12345678);
-}
-
-SpasmDataId spasm_data_add_bytes(SpasmData* data,
-                                 const char* data_name,
-                                 uint8_t* bytes,
-                                 size_t data_sz,
-                                 SpasmDataType type)
+void spasm_data_add_bytes(SpasmData* data,
+                          const char* data_name,
+                          uint8_t* bytes,
+                          size_t data_sz,
+                          SpasmDataType type)
 {
     uint32_t data_name_sz = (uint32_t)strlen(data_name);
 
@@ -36,13 +31,23 @@ SpasmDataId spasm_data_add_bytes(SpasmData* data,
     {
         case SpasmDataType_Data:
             hashmap_insert(data->data, data_name, data_name_sz, (void*)bytes, (uint32_t)data_sz);
-            return spasm_data_id_from_string(data_name, data_name_sz);
+            break;
         case SpasmDataType_ROData:
             hashmap_insert(data->rodata, data_name, data_name_sz, (void*)bytes, (uint32_t)data_sz);
-            return spasm_data_id_from_string(data_name, data_name_sz);
+            break;
         default:
-            return SPASM_INVALID_DATA_ID;
+            break;
     }
+}
+
+uintptr_t spasm_data_get_jit_address(SpasmData* data, SpasmDataId data_name)
+{
+    uint32_t data_name_sz = (uint32_t)strlen(data_name);
+
+    /* TODO: do it for ROData too */
+    void* value = hashmap_get(data->data, data_name, data_name_sz, NULL);
+
+    return (uintptr_t)value;
 }
 
 void spasm_data_destroy(SpasmData* data)
