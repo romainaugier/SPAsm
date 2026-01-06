@@ -2,10 +2,10 @@
 /* Copyright (c) 2025 - Present Romain Augier */
 /* All rights reserved. */
 
-#if defined(SPASM_ENABLE_AARCH64)
-
 #include "spasm/common.h"
 #include "spasm/instruction.h"
+
+#if defined(SPASM_ENABLE_AARCH64)
 
 /* Debug funcs */
 

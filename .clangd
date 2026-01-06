@@ -1,0 +1,5 @@
+CompileFlags:
+  Add:
+    - "-Iinclude"
+    - "-Iext/libromano/include"
+    - "-DSPASM_ENABLE_X86_64"

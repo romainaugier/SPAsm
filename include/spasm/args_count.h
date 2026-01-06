@@ -53,4 +53,6 @@
 
 #define SPASM_NARG(...) SPASM_GLUE(_SPASM_VAR_COUNT_EMPTY_, SPASM_IS_EMPTY(__VA_ARGS__))(__VA_ARGS__)
 
+#define SPASM_VA_ARGS(...) , ##__VA_ARGS__
+
 #endif /* !defined(__SPASM_ARGS_COUNT) */

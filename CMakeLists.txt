@@ -9,7 +9,9 @@ cmake_minimum_required(VERSION 3.15)
 project(spasm VERSION ${VERSION})
 
 option(ENABLE_X86_64 "Enable x86_64 backend" ON)
-option(ENABLE_AARCH64 "Enable aarch64 backend" OFF) # off for now, will work on it when I get a mac
+#
+# off for now, will work on it when someone offers me a mac
+option(ENABLE_AARCH64 "Enable aarch64 backend" OFF)
 
 set(LIB_NAME "lib${PROJECT_NAME}")
 set(ASM_NAME ${PROJECT_NAME})

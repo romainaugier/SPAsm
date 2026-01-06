@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# SPDX-License-Identifier: BSD-3-Clause 
+# SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 - Present Romain Augier
-# All rights reserved. 
+# All rights reserved.
 
 BUILDTYPE="Release"
 RUNTESTS=0
@@ -88,7 +88,7 @@ cmake -S . -B build -DRUN_TESTS=$RUNTESTS -DCMAKE_EXPORT_COMPILE_COMMANDS=$EXPOR
 
 if [[ $? -ne 0 ]]; then
     log_error "Error during CMake configuration"
-    exit 1 
+    exit 1
 fi
 
 cd build
@@ -103,7 +103,7 @@ fi
 
 if [[ $RUNTESTS -eq 1 ]]; then
     ctest --output-on-failure
-    
+
     if [[ $? -ne 0 ]]; then
         log_error "Error during CMake testing"
         cd ..
@@ -113,7 +113,7 @@ fi
 
 if [[ $INSTALL -eq 1 ]]; then
     cmake --install . --config %BUILDTYPE% --prefix $INSTALLDIR
-    
+
     if [[ $? -ne 0 ]]; then
         log_error "Error during CMake installation"
         cd ..

@@ -1,6 +1,6 @@
-# SPDX-License-Identifier: BSD-3-Clause 
+# SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 - Present Romain Augier
-# All rights reserved. 
+# All rights reserved.
 
 include(GNUInstallDirs)
 include(target_options)
@@ -13,7 +13,7 @@ include_directories(${libromano_INCLUDE_DIR})
 
 add_library(${LIB_NAME} SHARED ${SRC_FILES})
 set_target_properties(${LIB_NAME} PROPERTIES PREFIX "")
-set_target_properties(${LIB_NAME} PROPERTIES C_STANDARD 90)
+set_target_properties(${LIB_NAME} PROPERTIES C_STANDARD 11)
 set_target_properties(${LIB_NAME} PROPERTIES DEBUG_POSTFIX "d")
 
 set_target_options(${LIB_NAME})

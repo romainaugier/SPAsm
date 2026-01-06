@@ -18,11 +18,13 @@ typedef enum
     SpasmOperandType_Imm16,
     SpasmOperandType_Imm32,
     SpasmOperandType_Imm64,
+    SpasmOperandType_Data,
+    SpasmOperandType_Symbol,
 } SpasmOperandType;
 
-/* 
+/*
     Operand is 128 bits. Maybe we can limit imm_value to be 56 bits and pack an operand into 64 bits,
-    or find a way to encode the 64 bits imm_value better 
+    or find a way to encode the 64 bits imm_value better
 */
 typedef struct
 {
@@ -41,6 +43,14 @@ typedef struct
         uint8_t mem_index;
         int32_t mem_displacement;
         uint8_t mem_scale;
+    };
+
+    union {
+        uint32_t data_id;
+    };
+
+    union {
+        const char* symbol_name;
     };
 
 } SpasmOperand;
@@ -83,5 +93,13 @@ typedef struct
     .mem_index = (uint8_t)(idx),                          \
     .mem_displacement = (int32_t)(disp),                  \
     .mem_scale = (uint8_t)(scale)})
+
+#define SpasmData(id) ((SpasmOperand){ \
+    .type = SpasmOperandType_Data,     \
+    .data_id = (uint32_t)(id)})
+
+ #define SpasmSymbol(name) ((SpasmOperand){ \
+     .type = SpasmOperandType_Symbol,       \
+     .name = (const char*)(name)})
 
 #endif /* !defined(__SPASM_OPERAND) */

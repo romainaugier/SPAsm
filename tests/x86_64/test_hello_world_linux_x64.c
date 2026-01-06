@@ -17,11 +17,11 @@ int main(void)
 
     SpasmData data = spasm_data_new();
 
-    spasm_data_add_bytes(&data,
-                         "message",
-                         (uint8_t*)"Hello, World!\n",
-                         14,
-                         SpasmDataType_Data);
+    SpasmDataId hello_world_str_id = spasm_data_add_bytes(&data,
+                                                          "message",
+                                                          (uint8_t*)"Hello, World!\n",
+                                                          14,
+                                                          SpasmDataType_Data);
 
     SpasmInstructions instructions = spasm_instructions_new();
 
@@ -37,13 +37,13 @@ int main(void)
     spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RSI),
-                                 SpasmImm64(spasm_data_get_address("message")));
+                                 SpasmData(hello_world_str_id));
     spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RDX),
                                  SpasmImm8(14));
-    spasm_instructions_push_back(&instructions,
-                                 "syscall");
+    spasm_instructions_push_back0(&instructions,
+                                  "syscall");
 
     /* Exit */
     spasm_instructions_push_back(&instructions,
@@ -54,8 +54,8 @@ int main(void)
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RDI),
                                  SpasmImm8(0));
-    spasm_instructions_push_back(&instructions,
-                                 "syscall");
+    spasm_instructions_push_back0(&instructions,
+                                  "syscall");
 
     spasm_instructions_debug(&instructions, abi, 1);
 
@@ -64,6 +64,12 @@ int main(void)
     if(!assembler(&instructions, &bytecode, &data))
     {
         spasm_error("Error when assembling instructions, check the log for more details");
+
+        spasm_data_destroy(&data);
+        spasm_instructions_destroy(&instructions);
+        spasm_bytecode_destroy(&bytecode);
+
+        return 1;
     }
 
     spasm_bytecode_debug(&bytecode);

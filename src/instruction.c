@@ -35,8 +35,8 @@ SpasmInstructions spasm_instructions_new(void)
 
 void spasm_instructions_destroy(SpasmInstructions* instructions)
 {
-    vector_free(&instructions->instructions);
-    arena_destroy(&instructions->instructions_data);
+    vector_release(&instructions->instructions);
+    arena_release(&instructions->instructions_data);
 }
 
 /* Push back function to add instructions, does most of the job */
@@ -56,7 +56,7 @@ bool __spasm_instructions_push_back(SpasmInstructions* instructions,
     void* block = arena_push(&instructions->instructions_data, NULL, total_byte_size);
 
     SpasmOperand* operand_block = NULL;
-    
+
     if(num_operands > 0)
         operand_block = (SpasmOperand*)((char*)block + sizeof(SpasmInstruction));
 

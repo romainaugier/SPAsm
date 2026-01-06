@@ -30,9 +30,9 @@ typedef struct
 
 SPASM_API SpasmInstructions spasm_instructions_new(void);
 
-/* 
-    Implementation of the instruction_push_back, use the macro instead
-*/
+/*
+ * Implementation of the instruction_push_back, use the macro instead
+ */
 SPASM_API bool __spasm_instructions_push_back(SpasmInstructions* instructions,
                                               const char* mnemonic,
                                               uint8_t mnemonic_len,
@@ -40,24 +40,33 @@ SPASM_API bool __spasm_instructions_push_back(SpasmInstructions* instructions,
                                               ...);
 
 /*
-    Pushes an instruction (you need to pass the mnemonic length)
-*/
+ * Pushes an instruction (you need to pass the mnemonic length)
+ */
 #define spasm_instructions_push_backv(instructions, mnemonic, mnemonic_len, ...) \
-    __spasm_instructions_push_back(instructions,                                    \
-                                   mnemonic,                                        \
+    __spasm_instructions_push_back(instructions,                                 \
+                                   mnemonic,                                     \
                                    (uint8_t)mnemonic_len,                        \
-                                   (uint8_t)SPASM_NARG(__VA_ARGS__),                \
+                                   (uint8_t)SPASM_NARG(__VA_ARGS__),             \
                                    __VA_ARGS__)
 
 /*
-    Pushes an instruction (mnemonic length is calculated by strlen)
-*/
+ * Pushes an instruction (mnemonic length is calculated by strlen)
+ */
 #define spasm_instructions_push_back(instructions, mnemonic, ...)    \
     __spasm_instructions_push_back(instructions,                     \
                                    mnemonic,                         \
                                    (uint8_t)strlen(mnemonic),        \
                                    (uint8_t)SPASM_NARG(__VA_ARGS__), \
                                    __VA_ARGS__)
+
+/*
+ * Pushes and instruction without any operands
+ */
+#define spasm_instructions_push_back0(instructions, mnemonic)  \
+     __spasm_instructions_push_back(instructions,              \
+                                    mnemonic,                  \
+                                    (uint8_t)strlen(mnemonic), \
+                                    (uint8_t)0)
 
 SPASM_API void spasm_instructions_debug(SpasmInstructions* instructions,
                                         SpasmABI abi,

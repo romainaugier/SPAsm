@@ -30,5 +30,5 @@ void spasm_bytecode_debug(SpasmByteCode* bytecode)
 
 void spasm_bytecode_destroy(SpasmByteCode* bytecode)
 {
-    vector_free(&bytecode->data);
+    vector_release(&bytecode->data);
 }
