@@ -10,6 +10,17 @@
 #include "spasm/error.h"
 #include "spasm/data.h"
 
+#include <string.h>
+
+const SpasmByte result[] = {
+    0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00, 0x48, 0xC7, 0xC7, 0x01, 0x00,
+    0x00, 0x00, 0x48, 0xC7, 0xC6, 0x00, 0x00, 0x00, 0x00, 0x48, 0xC7, 0xC2,
+    0x0E, 0x00, 0x00, 0x00, 0x0F, 0x05, 0x48, 0xC7, 0xC0, 0x3C, 0x00, 0x00,
+    0x00, 0x48, 0xC7, 0xC7, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x05
+};
+
+const size_t result_size = 46;
+
 int main(void)
 {
     SpasmABI abi = spasm_get_current_abi();
@@ -29,11 +40,11 @@ int main(void)
     spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RAX),
-                                 SpasmImm8(1));
+                                 SpasmImm32(1));
     spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RDI),
-                                 SpasmImm16(1));
+                                 SpasmImm32(1));
     spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RSI),
@@ -49,7 +60,7 @@ int main(void)
     spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RAX),
-                                 SpasmImm8(60));
+                                 SpasmImm32(60));
     spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmReg(SpasmRegister_x86_64_RDI),
@@ -73,6 +84,12 @@ int main(void)
     }
 
     spasm_bytecode_debug(&bytecode);
+
+    SPASM_ASSERT(vector_size(&bytecode.data) == result_size,
+                 "Invalid bytecode size");
+
+    SPASM_ASSERT(memcmp(vector_at(&bytecode.data, 0), result, result_size * sizeof(SpasmByte)) == 0,
+                 "Invalid bytecode");
 
     spasm_data_destroy(&data);
     spasm_instructions_destroy(&instructions);

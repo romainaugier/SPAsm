@@ -22,7 +22,7 @@ void spasm_bytecode_debug(SpasmByteCode* bytecode)
 {
     for(size_t i = 0; i < vector_size(&bytecode->data); i++)
     {
-        printf("%x", *(SpasmByte*)vector_at(&bytecode->data, i));
+        printf("%02x", *(SpasmByte*)vector_at(&bytecode->data, i));
     }
 
     printf("\n");

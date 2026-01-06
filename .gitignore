@@ -2,4 +2,9 @@ build
 .vscode
 
 venv
+<<<<<<< HEAD
 *.pyc
+=======
+*.pyc
+__pycache__
+>>>>>>> ab6151cb57e368e0518f650be3827d311d7d394b
