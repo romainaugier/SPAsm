@@ -1,10 +1,10 @@
-# SPDX-License-Identifier: BSD-3-Clause 
+# SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 - Present Romain Augier
-# All rights reserved. 
+# All rights reserved.
 
 include(target_options)
 
-file(GLOB_RECURSE TEST_FILES *.c)
+file(GLOB_RECURSE TEST_FILES test_*.c)
 
 foreach(test_file ${TEST_FILES})
     get_filename_component(TESTNAME ${test_file} NAME_WLE)
@@ -13,7 +13,7 @@ foreach(test_file ${TEST_FILES})
     add_executable(${TESTNAME} ${test_file})
     set_target_options(${TESTNAME})
     target_link_libraries(${TESTNAME} ${LIB_NAME})
-    
+
     add_test(${TESTNAME} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TESTNAME})
 endforeach()
 

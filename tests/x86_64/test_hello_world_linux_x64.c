@@ -32,32 +32,32 @@ int main(void)
     /* Print "Hello, World!" to stdout */
     spasm_instructions_push_back(&instructions,
                                  "mov",
-                                 SpasmReg(SpasmRegister_x86_64_RAX),
-                                 SpasmImm32(1));
+                                 SpasmOpReg(SpasmRegister_x86_64_RAX),
+                                 SpasmOpImm32(1));
     spasm_instructions_push_back(&instructions,
                                  "mov",
-                                 SpasmReg(SpasmRegister_x86_64_RDI),
-                                 SpasmImm32(1));
+                                 SpasmOpReg(SpasmRegister_x86_64_RDI),
+                                 SpasmOpImm32(1));
     spasm_instructions_push_back(&instructions,
                                  "mov",
-                                 SpasmReg(SpasmRegister_x86_64_RSI),
-                                 SpasmData("message"));
+                                 SpasmOpReg(SpasmRegister_x86_64_RSI),
+                                 SpasmOpData("message"));
     spasm_instructions_push_back(&instructions,
                                  "mov",
-                                 SpasmReg(SpasmRegister_x86_64_RDX),
-                                 SpasmImm32(14));
+                                 SpasmOpReg(SpasmRegister_x86_64_RDX),
+                                 SpasmOpImm32(14));
     spasm_instructions_push_back0(&instructions,
                                   "syscall");
 
     /* Exit */
     spasm_instructions_push_back(&instructions,
                                  "mov",
-                                 SpasmReg(SpasmRegister_x86_64_RAX),
-                                 SpasmImm32(60));
+                                 SpasmOpReg(SpasmRegister_x86_64_RAX),
+                                 SpasmOpImm32(60));
     spasm_instructions_push_back(&instructions,
                                  "mov",
-                                 SpasmReg(SpasmRegister_x86_64_RSI),
-                                 SpasmImm32(0));
+                                 SpasmOpReg(SpasmRegister_x86_64_RSI),
+                                 SpasmOpImm32(0));
     spasm_instructions_push_back0(&instructions,
                                   "syscall");
 

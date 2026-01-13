@@ -28,6 +28,15 @@ void spasm_bytecode_debug(SpasmByteCode* bytecode)
     printf("\n");
 }
 
+SpasmByte* spasm_bytecode_get(SpasmByteCode* bytecode, size_t* size)
+{
+    SPASM_ASSERT(bytecode != NULL, "bytecode is NULL");
+
+    *size = vector_size(&bytecode->data);
+
+    return (SpasmByte*)vector_at(&bytecode->data, 0);
+}
+
 void spasm_bytecode_destroy(SpasmByteCode* bytecode)
 {
     vector_release(&bytecode->data);

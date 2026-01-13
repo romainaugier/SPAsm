@@ -55,51 +55,51 @@ typedef struct
 
 } SpasmOperand;
 
-#define SpasmImm8(val) ((SpasmOperand){ \
+#define SpasmOpImm8(val) ((SpasmOperand){ \
     .type = SpasmOperandType_Imm8,      \
     .imm_value = (int64_t)(val)})
 
-#define SpasmImm16(val) ((SpasmOperand){ \
+#define SpasmOpImm16(val) ((SpasmOperand){ \
     .type = SpasmOperandType_Imm16,      \
     .imm_value = (int64_t)(val)})
 
-#define SpasmImm32(val) ((SpasmOperand){ \
+#define SpasmOpImm32(val) ((SpasmOperand){ \
     .type = SpasmOperandType_Imm32,      \
     .imm_value = (int64_t)(val)})
 
-#define SpasmImm64(val) ((SpasmOperand){ \
+#define SpasmOpImm64(val) ((SpasmOperand){ \
     .type = SpasmOperandType_Imm64,      \
     .imm_value = (int64_t)(val)})
 
-#define SpasmReg(r) ((SpasmOperand){   \
+#define SpasmOpReg(r) ((SpasmOperand){   \
     .type = SpasmOperandType_Register, \
     .reg = (uint8_t)(r)})
 
-#define SpasmScalar(r) ((SpasmOperand){ \
+#define SpasmOpScalar(r) ((SpasmOperand){ \
     .type = SpasmOperandType_Scalar,    \
     .reg = (uint8_t)(r)})
 
-#define SpasmVector(r) ((SpasmOperand){ \
+#define SpasmOpVector(r) ((SpasmOperand){ \
     .type = SpasmOperandType_Vector,    \
     .reg = (uint8_t)(r)})
 
-#define SpasmOPMask(r) ((SpasmOperand){ \
+#define SpasmOpOPMask(r) ((SpasmOperand){ \
     .type = SpasmOperandType_Vector,    \
     .reg = (uint8_t)(r)})
 
-#define SpasmMemory(r, idx, disp, scale) ((SpasmOperand){ \
+#define SpasmOpMemory(r, idx, disp, scale) ((SpasmOperand){ \
     .type = SpasmOperandType_Mem,                         \
     .mem_reg = (uint8_t)(r),                              \
     .mem_index = (uint8_t)(idx),                          \
     .mem_displacement = (int32_t)(disp),                  \
     .mem_scale = (uint8_t)(scale)})
 
-#define SpasmData(id) ((SpasmOperand){ \
+#define SpasmOpData(id) ((SpasmOperand){ \
     .type = SpasmOperandType_Data,     \
     .data_id = (const char*)(id)})
 
- #define SpasmSymbol(name) ((SpasmOperand){ \
-     .type = SpasmOperandType_Symbol,       \
-     .name = (const char*)(name)})
+#define SpasmOpSymbol(name) ((SpasmOperand){ \
+    .type = SpasmOperandType_Symbol,       \
+    .symbol_name = (const char*)(name)})
 
 #endif /* !defined(__SPASM_OPERAND) */
