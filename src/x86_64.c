@@ -605,9 +605,16 @@ Spasm_x86_64_ModRMSibOffset spasm_x86_64_operands_as_modrm_sib_offset(SpasmOpera
     if(dst->type == SpasmOperandType_Register && src->type == SpasmOperandType_Register)
     {
         /* mod=11 (register-direct) */
-        result.modrm = (0x3 << 6) |
-                       (spasm_x86_64_get_rm(src->reg) << 3) |
-                       spasm_x86_64_get_rm(dst->reg);
+
+        if(instr_info->operand_sizes[0] > 64)
+            result.modrm = (0x3 << 6) |
+                           (spasm_x86_64_get_rm(dst->reg) << 3) |
+                           spasm_x86_64_get_rm(src->reg);
+        else
+            result.modrm = (0x3 << 6) |
+                           (spasm_x86_64_get_rm(src->reg) << 3) |
+                           spasm_x86_64_get_rm(dst->reg);
+
         return result;
     }
 

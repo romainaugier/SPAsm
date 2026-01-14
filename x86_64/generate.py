@@ -13,23 +13,23 @@ import optparse
 from typing import List, Tuple, Optional, Any
 from opcodes import x86_64
 
-def map_operand_type(opcode_operand: x86_64.Operand) -> str:
-    if not opcode_operand:
+def map_operand_type(operand: x86_64.Operand) -> str:
+    if not operand:
         return "OP_NONE"
 
-    if opcode_operand.type == 'k':
+    if operand.type == 'k':
         return "OP_REG"
-    elif opcode_operand.is_register:
+    elif operand.is_register:
         return "OP_REG"
-    elif opcode_operand.is_memory:
+    elif operand.is_memory:
         return "OP_MEM"
-    elif opcode_operand.is_immediate:
-        if opcode_operand.type == "imm4":
+    elif operand.is_immediate:
+        if operand.type == "imm4":
             return f"OP_IMM8"
 
-        return f"OP_{opcode_operand.type.upper()}"
-    elif opcode_operand.type.startswith("rel"):
-        return f"OP_IMM{opcode_operand.type.replace('rel', '')}"
+        return f"OP_{operand.type.upper()}"
+    elif operand.type.startswith("rel"):
+        return f"OP_IMM{operand.type.replace('rel', '')}"
     else:
         return "OP_NONE"
 
@@ -188,6 +188,11 @@ def generate_c_file(output_c_file_path: str) -> bool:
     for instruction in get_x86_64_instructions():
         for form in instruction.forms:
             operands = form.operands
+
+            # TODO: Add support for special forms with eax (shorter encodings)
+            if len(operands) > 0 and operands[0].type in ("al", "ax", "eax", "rax", "xmm0"):
+                print(f"Skipping instruction \"{instruction.name}\" with form {operands}")
+                continue
 
             if len(operands) > 4:
                 print(f"Skipping instruction \"{instruction.name}\", it has more than 4 operands")
