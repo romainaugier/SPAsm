@@ -208,6 +208,8 @@ size_t spasm_x86_64_operand_debug(SpasmOperand* operand, char* fmt_buf, size_t m
         case SpasmOperandType_Imm32:
         case SpasmOperandType_Imm64:
             return (size_t)snprintf(fmt_buf, max_fmt_sz, "0x%llx", operand->imm_value);
+        case SpasmOperandType_Symbol:
+            return (size_t)snprintf(fmt_buf, max_fmt_sz, "%s", operand->symbol_name);
         default:
             return (size_t)snprintf(fmt_buf, max_fmt_sz, "???");
     }
@@ -378,6 +380,7 @@ typedef struct
     uint8_t vvvv;
     uint8_t aaa;
     bool z;
+    uint8_t modrm_reg;
 } Spasm_x86_64_PrefixInfo;
 
 Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info,
@@ -602,6 +605,10 @@ Spasm_x86_64_ModRMSibOffset spasm_x86_64_operands_as_modrm_sib_offset(SpasmOpera
         /* mod=11 (register-direct) */
         result.modrm = (0x3 << 6) |
                        (spasm_x86_64_get_rm(dest->reg));
+
+        if(prefix_info->modrm_reg != 0xff)
+            result.modrm |= (prefix_info->modrm_reg << 3);
+
         return result;
     }
 
@@ -762,16 +769,21 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
         .pp = info->pp,
         .mmmmm = info->mmmmm,
         .vector_len = (info->operand_sizes[0] == 512) ? 2 :
-                      (info->operand_sizes[0] == 256) ? 1 : 0
+                      (info->operand_sizes[0] == 256) ? 1 : 0,
+        .modrm_reg = info->modrm_reg,
     };
 
-    Spasm_x86_64_PrefixBytes prefix = spasm_encode_x86_64_prefix(prefix_info, instr->operands, instr->num_operands);
+    Spasm_x86_64_PrefixBytes prefix = spasm_encode_x86_64_prefix(prefix_info,
+                                                                 instr->operands,
+                                                                 instr->num_operands);
 
     Spasm_x86_64_ModRMSibOffset modrm_sib;
     memset(&modrm_sib, 0, sizeof(Spasm_x86_64_ModRMSibOffset));
 
     if(info->needs_modrm)
-        modrm_sib = spasm_x86_64_operands_as_modrm_sib_offset(&instr->operands[0], &instr->operands[1], &prefix_info);
+        modrm_sib = spasm_x86_64_operands_as_modrm_sib_offset(&instr->operands[0],
+                                                              &instr->operands[1],
+                                                              &prefix_info);
 
     for(uint8_t i = 0; i < prefix.len; i++)
     {

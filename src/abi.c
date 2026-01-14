@@ -38,6 +38,21 @@ SpasmABI spasm_get_current_abi()
     }
 }
 
+const char* spasm_get_abi_as_string(SpasmABI abi)
+{
+    switch(abi)
+    {
+        case SpasmABI_WindowsX64:
+            return "Windows x64";
+        case SpasmABI_LinuxX64:
+            return "Linux x64";
+        case SpasmABI_MacOSX64:
+            return "MacOS x64";
+        default:
+            return "Unsupported ABI";
+    }
+}
+
 size_t get_max_available_gp_registers(SpasmABI abi)
 {
     switch(abi)

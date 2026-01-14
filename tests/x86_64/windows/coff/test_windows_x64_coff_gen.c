@@ -9,7 +9,7 @@
 #include "spasm/register.h"
 #include "spasm/error.h"
 #include "spasm/data.h"
-#include "spasm/windows/coff.h"
+#include "spasm/obj.h"
 
 #include <string.h>
 
@@ -36,6 +36,10 @@ int main(void)
 
     /* Exit */
     spasm_instructions_push_back(&instructions,
+                                 "sub",
+                                 SpasmOpReg(SpasmRegister_x86_64_RSP),
+                                 SpasmOpImm8(40));
+    spasm_instructions_push_back(&instructions,
                                  "mov",
                                  SpasmOpReg(SpasmRegister_x86_64_RCX),
                                  SpasmOpImm32(0xAAAA));
@@ -58,18 +62,18 @@ int main(void)
         return 1;
     }
 
-    SpasmCoffMachineType machine_type = spasm_abi_to_coff_machine_type(abi);
+    spasm_bytecode_debug(&bytecode);
 
-    size_t coff_data_sz = 0;
-    uint8_t* coff_data = spasm_generate_coff(&bytecode, &data, machine_type, &coff_data_sz);
-
-    if(coff_data == NULL)
+    if(!spasm_obj_write_file("out.obj", &bytecode, &data, abi))
     {
-        spasm_error("Error while generating COFF file");
+        spasm_error("Cannot generate COFF file");
+
+        spasm_data_release(&data);
+        spasm_instructions_destroy(&instructions);
+        spasm_bytecode_destroy(&bytecode);
+
         return 1;
     }
-
-    free(coff_data);
 
     spasm_data_release(&data);
     spasm_instructions_destroy(&instructions);

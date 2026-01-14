@@ -17,11 +17,11 @@ typedef enum {
     SpasmObjType_MachO,
 } SpasmObjType;
 
-SpasmObjType spasm_abi_to_obj_type(SpasmABI abi);
+SPASM_API SpasmObjType spasm_abi_to_obj_type(SpasmABI abi);
 
-bool spasm_write_obj_file(const char* filename,
-                          SpasmByteCode* bytecode,
-                          SpasmData* data,
-                          SpasmObjType obj_type);
+SPASM_API bool spasm_obj_write_file(const char* filename,
+                                    SpasmByteCode* bytecode,
+                                    SpasmData* data,
+                                    SpasmABI abi);
 
 #endif /* !defined(__SPASM_OBJ) */

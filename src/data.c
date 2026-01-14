@@ -103,7 +103,7 @@ void spasm_data_add_extern_symbol(SpasmData* data,
                        (const void*)symbol_name,
                        (const uint32_t)symbol_name_sz,
                        &sym,
-                       sizeof(Vector*));
+                       sizeof(SpasmExternSymbol));
     }
     else
     {
@@ -185,7 +185,7 @@ void spasm_data_add_export_symbol(SpasmData* data,
         sym.refs_offset = vector_new(8, sizeof(size_t));
         sym.index = data->symbols_index++;
 
-        hashmap_insert(data->extern_symbols,
+        hashmap_insert(data->export_symbols,
                        (const void*)symbol_name,
                        (const uint32_t)symbol_name_sz,
                         &sym,
@@ -227,7 +227,23 @@ void spasm_data_release(SpasmData* data)
     hashmap_free(data->data);
     hashmap_free(data->bss);
 
-    HashMapIterator it = 0;
-    Vector* value = NULL;
+    SpasmDataExternSymbolIterator extern_it;
+    spasm_data_extern_symbol_iterator_init(&extern_it);
 
+    while(spasm_data_iterate_extern_symbols(data, &extern_it))
+    {
+        vector_free(extern_it.symbol->refs_offset);
+    }
+
+    hashmap_free(data->extern_symbols);
+
+    SpasmDataExportSymbolIterator export_it;
+    spasm_data_export_symbol_iterator_init(&export_it);
+
+    while(spasm_data_iterate_export_symbols(data, &export_it))
+    {
+        vector_free(export_it.symbol->refs_offset);
+    }
+
+    hashmap_free(data->export_symbols);
 }

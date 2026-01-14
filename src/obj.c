@@ -3,6 +3,8 @@
 /* All rights reserved. */
 
 #include "spasm/obj.h"
+#include "spasm/error.h"
+#include "spasm/windows/coff.h"
 
 SpasmObjType spasm_abi_to_obj_type(SpasmABI abi)
 {
@@ -32,18 +34,53 @@ const char* spasm_obj_file_extension(SpasmObjType type)
     }
 }
 
-bool spasm_write_obj_file(const char* filename,
+bool spasm_obj_write_file(const char* filename,
                           SpasmByteCode* bytecode,
                           SpasmData* data,
-                          SpasmObjType obj_type)
+                          SpasmABI abi)
 {
     SPASM_ASSERT(bytecode != NULL, "bytecode is NULL");
     SPASM_ASSERT(data != NULL, "data is NULL");
 
-    SPASM_UNUSED(filename);
-    SPASM_UNUSED(obj_type);
+    size_t out_sz;
+    uint8_t* out_data = NULL;
 
-    /* TODO */
+    switch(spasm_abi_to_obj_type(abi))
+    {
+        case SpasmObjType_Coff:
+        {
+            out_data = spasm_generate_coff(bytecode,
+                                           data,
+                                           spasm_abi_to_coff_machine_type(abi),
+                                           &out_sz);
+            break;
+        }
+        default:
+        {
+            spasm_error("Unsupported ABI: %s", spasm_get_abi_as_string(abi));
+            return false;
+        }
+    }
 
-    return true;
+    if(data == NULL)
+        return false;
+
+    FILE* f = fopen(filename, "wb");
+
+    if(f == NULL)
+    {
+        spasm_error("Cannot open file: %s", filename);
+        free(out_data);
+        return -1;
+    }
+
+    size_t written = fwrite(out_data, 1, out_sz, f);
+
+    if(written != out_sz)
+        spasm_error("Cannot write to file: %s", filename);
+
+    fclose(f);
+    free(out_data);
+
+    return written == out_sz;
 }

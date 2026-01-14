@@ -88,6 +88,7 @@ typedef struct
     uint8_t opcode[4];
     uint8_t opcode_len;
     uint8_t needs_modrm;
+    uint8_t modrm_reg;
     uint8_t prefix;
     uint8_t pp;
     uint8_t mmmmm;

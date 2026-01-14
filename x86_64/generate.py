@@ -16,7 +16,7 @@ from opcodes import x86_64
 def map_operand_type(opcode_operand: x86_64.Operand) -> str:
     if not opcode_operand:
         return "OP_NONE"
-    
+
     if opcode_operand.type == 'k':
         return "OP_REG"
     elif opcode_operand.is_register:
@@ -84,7 +84,7 @@ def parse_opcode(opcode: str) -> Tuple[List[str], bool]:
 def has_prefix(t: Any, l: List[Any]) -> bool:
     return any([isinstance(x, t) for x in l])
 
-def parse_encoding(encoding: x86_64.Encoding) -> Tuple[List[str], bool, str, str]:
+def parse_encoding(encoding: x86_64.Encoding) -> Tuple[List[str], bool, str, str, str]:
     # Returns: opcode, needs_modrm, prefix_type, pp
 
     opcode = list()
@@ -97,6 +97,13 @@ def parse_encoding(encoding: x86_64.Encoding) -> Tuple[List[str], bool, str, str
 
     prefix = "Spasm_x86_64_PrefixType_NONE"
     pp = "0x00"
+    modrm_reg = "0xff"
+
+    if needs_modrm:
+        for component in encoding.components:
+            if isinstance(component, x86_64.ModRM) and isinstance(component.reg, int):
+                modrm_reg = str(hex(component.reg))
+                break
 
     if has_prefix(x86_64.VEX, encoding.components):
         prefix = "Spasm_x86_64_PrefixType_VEX2"
@@ -107,7 +114,7 @@ def parse_encoding(encoding: x86_64.Encoding) -> Tuple[List[str], bool, str, str
     elif has_prefix(x86_64.REX, encoding.components):
         prefix = "Spasm_x86_64_PrefixType_REX"
 
-    return opcode, needs_modrm, prefix, pp
+    return opcode, needs_modrm, modrm_reg, prefix, pp
 
 cpu_flag_map = {
     "BASE",
@@ -176,7 +183,7 @@ def generate_c_file(output_c_file_path: str) -> bool:
 
             operand_types = parse_operand_types(operands)
             operand_sizes = parse_operand_sizes(operands)
-            opcode_bytes, needs_modrm, prefix_type, pp = parse_encoding(encoding)
+            opcode_bytes, needs_modrm, modrm_reg, prefix_type, pp = parse_encoding(encoding)
             mmmmm = "0x01" if 'VEX' in prefix_type or 'EVEX' in prefix_type else "0x00"
             cpu_flag = map_cpu_flag(isa)
 
@@ -186,6 +193,7 @@ def generate_c_file(output_c_file_path: str) -> bool:
                 "operand_sizes": operand_sizes,
                 "opcode": opcode_bytes,
                 "needs_modrm": needs_modrm,
+                "modrm_reg": modrm_reg,
                 "prefix": prefix_type,
                 "pp": pp,
                 "mmmmm": mmmmm,
@@ -227,6 +235,7 @@ def generate_c_file(output_c_file_path: str) -> bool:
             f.write(f"        .opcode = {{ {', '.join(instruction['opcode'])} }},\n")
             f.write(f"        .opcode_len = {len(instruction['opcode'])},\n")
             f.write(f"        .needs_modrm = {str(instruction['needs_modrm']).lower()},\n")
+            f.write(f"        .modrm_reg = {instruction['modrm_reg']},\n")
             f.write(f"        .prefix = {instruction['prefix']},\n")
             f.write(f"        .pp = {instruction['pp']},\n")
             f.write(f"        .mmmmm = {instruction['mmmmm']},\n")
