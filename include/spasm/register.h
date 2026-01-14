@@ -9,7 +9,7 @@
 
 #include "spasm/common.h"
 
-typedef enum 
+typedef enum
 {
     /* x86_64 Registers https://wiki.osdev.org/CPU_Registers_x86-64 */
 #if defined(SPASM_ENABLE_X86_64)
@@ -313,6 +313,11 @@ typedef enum
     SpasmRegister_aarch64_COUNT = SpasmRegister_aarch64_V31 - SpasmRegister_aarch64_NONE,
 #endif /* defined(SPASM_ENABLE_AARCH64) */
 
+    /* Used for parsing */
+    SpasmRegister_Invalid,
+
 } SpasmRegister;
+
+SPASM_API SpasmRegister spasm_register_from_string(const char* s);
 
 #endif /* !defined(__SPASM_REGISTER) */

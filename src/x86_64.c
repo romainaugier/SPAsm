@@ -207,7 +207,7 @@ size_t spasm_x86_64_operand_debug(SpasmOperand* operand, char* fmt_buf, size_t m
         case SpasmOperandType_Imm16:
         case SpasmOperandType_Imm32:
         case SpasmOperandType_Imm64:
-            return (size_t)snprintf(fmt_buf, max_fmt_sz, "0x%llx", operand->imm_value);
+            return (size_t)snprintf(fmt_buf, max_fmt_sz, "0x%zx", operand->imm_value);
         case SpasmOperandType_Symbol:
             return (size_t)snprintf(fmt_buf, max_fmt_sz, "%s", operand->symbol_name);
         default:
@@ -380,10 +380,10 @@ typedef struct
     uint8_t vvvv;
     uint8_t aaa;
     bool z;
-    uint8_t modrm_reg;
 } Spasm_x86_64_PrefixInfo;
 
 Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info,
+                                                    const Spasm_x86_64_InstructionInfo* instr_info,
                                                     SpasmOperand* operands,
                                                     uint8_t num_operands)
 {
@@ -516,11 +516,21 @@ Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info
             {
                 SpasmByte code = spasm_x86_64_get_register_code(operands[i].reg);
 
+                if(instr_info->force_rex_w)
+                    W = 1;
+
                 if(code > 7)
                 {
-                    if(i == 0)
+                    if(instr_info->reg_in_opcode)
+                    {
+                        B = 1;
+                        result.bytes[0] += code & 7;
+                    }
+
+                    if(instr_info->reg_in_modrm_reg && i  == instr_info->modrm_reg_operand)
                         R = 1;
-                    else if(i == 1)
+
+                    if(instr_info->reg_in_modrm_rm && i == instr_info->modrm_rm_operand)
                         B = 1;
                 }
 
@@ -585,36 +595,37 @@ SpasmByte spasm_x86_64_get_rm(SpasmRegister reg)
     return code & 0x7;
 }
 
-Spasm_x86_64_ModRMSibOffset spasm_x86_64_operands_as_modrm_sib_offset(SpasmOperand* dest,
+Spasm_x86_64_ModRMSibOffset spasm_x86_64_operands_as_modrm_sib_offset(SpasmOperand* dst,
                                                                       SpasmOperand* src,
-                                                                      Spasm_x86_64_PrefixInfo* prefix_info)
+                                                                      Spasm_x86_64_PrefixInfo* prefix_info,
+                                                                      const Spasm_x86_64_InstructionInfo* instr_info)
 {
     Spasm_x86_64_ModRMSibOffset result = { 0 };
 
-    if(dest->type == SpasmOperandType_Register && src->type == SpasmOperandType_Register)
+    if(dst->type == SpasmOperandType_Register && src->type == SpasmOperandType_Register)
     {
         /* mod=11 (register-direct) */
         result.modrm = (0x3 << 6) |
-                       (spasm_x86_64_get_rm(dest->reg) << 3) |
-                       spasm_x86_64_get_rm(src->reg);
+                       (spasm_x86_64_get_rm(src->reg) << 3) |
+                       spasm_x86_64_get_rm(dst->reg);
         return result;
     }
 
-    if(dest->type == SpasmOperandType_Register && src->type >= SpasmOperandType_Imm8)
+    if(dst->type == SpasmOperandType_Register && src->type >= SpasmOperandType_Imm8)
     {
         /* mod=11 (register-direct) */
         result.modrm = (0x3 << 6) |
-                       (spasm_x86_64_get_rm(dest->reg));
+                       (spasm_x86_64_get_rm(dst->reg));
 
-        if(prefix_info->modrm_reg != 0xff)
-            result.modrm |= (prefix_info->modrm_reg << 3);
+        if(instr_info->reg_in_modrm_reg)
+            result.modrm |= (instr_info->modrm_reg_operand << 3);
 
         return result;
     }
 
-    const SpasmOperand* mem_operand = (dest->type == SpasmOperandType_Mem) ? dest : src;
-    const SpasmOperand* reg_operand = (dest->type == SpasmOperandType_Mem) ? src : dest;
-    bool mem_is_dest = (dest->type == SpasmOperandType_Mem);
+    const SpasmOperand* mem_operand = (dst->type == SpasmOperandType_Mem) ? dst : src;
+    const SpasmOperand* reg_operand = (dst->type == SpasmOperandType_Mem) ? src : dst;
+    bool mem_is_dest = (dst->type == SpasmOperandType_Mem);
 
     SpasmRegister base = mem_operand->mem_reg;
     SpasmRegister index = mem_operand->mem_index;
@@ -655,7 +666,7 @@ Spasm_x86_64_ModRMSibOffset spasm_x86_64_operands_as_modrm_sib_offset(SpasmOpera
     uint8_t rm = 0;
 
     if(index != SpasmRegister_x86_64_NONE ||
-       scale != 0 ||
+       scale != 1 ||
        base == SpasmRegister_x86_64_RSP ||
        base == SpasmRegister_x86_64_R12)
     {
@@ -706,11 +717,11 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
 
     for(size_t i = 0; i < spasm_x86_64_instruction_table_size; i++)
     {
-        if(strcmp(instr->mnemonic, spasm_x86_64_instruction_table[i].mnemonic) == 0)
+        const Spasm_x86_64_InstructionInfo* current_instr = &spasm_x86_64_instruction_table[i];
+
+        if(instr->mnemonic_len == current_instr->mnemonic_len && strcmp(instr->mnemonic, current_instr->mnemonic) == 0)
         {
             bool match = true;
-
-            const Spasm_x86_64_InstructionInfo* current_instr = &spasm_x86_64_instruction_table[i];
 
             for(uint8_t j = 0; j < instr->num_operands; j++)
             {
@@ -723,8 +734,8 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
                 const size_t operand_size = spasm_x86_64_get_operand_size(&instr->operands[j],
                                                                           current_instr->operand_sizes[j]);
 
-                if(current_instr->operand_sizes[j] != 0 && operand_size != current_instr->operand_sizes[j] &&
-                   instr->operands[j].type != SpasmOperandType_Register)
+                if(current_instr->operand_sizes[j] != 0 &&
+                   operand_size != current_instr->operand_sizes[j])
                 {
                     match = false;
                     break;
@@ -770,10 +781,10 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
         .mmmmm = info->mmmmm,
         .vector_len = (info->operand_sizes[0] == 512) ? 2 :
                       (info->operand_sizes[0] == 256) ? 1 : 0,
-        .modrm_reg = info->modrm_reg,
     };
 
     Spasm_x86_64_PrefixBytes prefix = spasm_encode_x86_64_prefix(prefix_info,
+                                                                 info,
                                                                  instr->operands,
                                                                  instr->num_operands);
 
@@ -783,7 +794,8 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
     if(info->needs_modrm)
         modrm_sib = spasm_x86_64_operands_as_modrm_sib_offset(&instr->operands[0],
                                                               &instr->operands[1],
-                                                              &prefix_info);
+                                                              &prefix_info,
+                                                              info);
 
     for(uint8_t i = 0; i < prefix.len; i++)
     {

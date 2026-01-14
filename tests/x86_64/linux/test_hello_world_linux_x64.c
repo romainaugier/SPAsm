@@ -31,7 +31,7 @@ int main(void)
                          "message",
                          (uint8_t*)"Hello, World!\n",
                          14,
-                         SpasmDataType_Data);
+                         SpasmDataType_ROData);
 
     SpasmInstructions instructions = spasm_instructions_new();
 
@@ -82,7 +82,8 @@ int main(void)
         return 1;
     }
 
-    printf("%zu\n", vector_size(&bytecode.data));
+    size_t bytecode_sz;
+    SpasmByte* bytes = spasm_bytecode_get(&bytecode, &bytecode_sz);
 
     spasm_bytecode_debug(&bytecode);
 

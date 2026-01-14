@@ -28,6 +28,8 @@ def map_operand_type(opcode_operand: x86_64.Operand) -> str:
             return f"OP_IMM8"
 
         return f"OP_{opcode_operand.type.upper()}"
+    elif opcode_operand.type.startswith("rel"):
+        return f"OP_IMM{opcode_operand.type.replace('rel', '')}"
     else:
         return "OP_NONE"
 
@@ -84,26 +86,40 @@ def parse_opcode(opcode: str) -> Tuple[List[str], bool]:
 def has_prefix(t: Any, l: List[Any]) -> bool:
     return any([isinstance(x, t) for x in l])
 
-def parse_encoding(encoding: x86_64.Encoding) -> Tuple[List[str], bool, str, str, str]:
-    # Returns: opcode, needs_modrm, prefix_type, pp
+def parse_encoding(encoding: x86_64.Encoding, first_operand_is_reg: bool) -> Tuple[List[str], bool, str, str, bool, Optional[int], Optional[int], bool]:
+    # Returns: opcode, needs_modrm, modrm_reg, prefix_type, pp, uses_register_byte
 
     opcode = list()
+
+    reg_in_opcode = False
+
+    needs_modrm = False
+    modrm_reg_operand = None
+    modrm_rm_operand = None
+
+    forces_rex_w = False
 
     for component in encoding.components:
         if isinstance(component, x86_64.Opcode):
             opcode.append("0x" + f"{component.byte:02X}")
+        elif isinstance(component, x86_64.RegisterByte):
+            reg_in_opcode = True
+        elif isinstance(component, x86_64.ModRM):
+            needs_modrm = True
 
-    needs_modrm = has_prefix(x86_64.ModRM, encoding.components)
+            if isinstance(component.reg, int):
+                modrm_reg_operand = component.reg
+            if isinstance(component.rm, int):
+                modrm_rm_operand = component.rm
+        elif isinstance(component, x86_64.REX):
+            if component.W:
+                forces_rex_w = True
+
+    if len(opcode) == 1 and int(opcode[0], 16) >= 0xb8 and int(opcode[0], 16) <= 0xbf and first_operand_is_reg:
+        reg_in_opcode = True
 
     prefix = "Spasm_x86_64_PrefixType_NONE"
     pp = "0x00"
-    modrm_reg = "0xff"
-
-    if needs_modrm:
-        for component in encoding.components:
-            if isinstance(component, x86_64.ModRM) and isinstance(component.reg, int):
-                modrm_reg = str(hex(component.reg))
-                break
 
     if has_prefix(x86_64.VEX, encoding.components):
         prefix = "Spasm_x86_64_PrefixType_VEX2"
@@ -114,7 +130,7 @@ def parse_encoding(encoding: x86_64.Encoding) -> Tuple[List[str], bool, str, str
     elif has_prefix(x86_64.REX, encoding.components):
         prefix = "Spasm_x86_64_PrefixType_REX"
 
-    return opcode, needs_modrm, modrm_reg, prefix, pp
+    return opcode, needs_modrm, prefix, pp, reg_in_opcode, modrm_reg_operand, modrm_rm_operand, forces_rex_w
 
 cpu_flag_map = {
     "BASE",
@@ -177,28 +193,34 @@ def generate_c_file(output_c_file_path: str) -> bool:
                 print(f"Skipping instruction \"{instruction.name}\", it has more than 4 operands")
                 continue
 
-            encoding = form.encodings[0]
+            for encoding in form.encodings:
+                isa = form.isa_extensions
 
-            isa = form.isa_extensions
+                operand_types = parse_operand_types(operands)
+                operand_sizes = parse_operand_sizes(operands)
 
-            operand_types = parse_operand_types(operands)
-            operand_sizes = parse_operand_sizes(operands)
-            opcode_bytes, needs_modrm, modrm_reg, prefix_type, pp = parse_encoding(encoding)
-            mmmmm = "0x01" if 'VEX' in prefix_type or 'EVEX' in prefix_type else "0x00"
-            cpu_flag = map_cpu_flag(isa)
+                opcode_bytes, needs_modrm, prefix_type, pp, reg_in_opcode, modrm_reg_operand, modrm_rm_operand, force_rex_w = parse_encoding(encoding,
+                    operand_types[0] == "OP_REG")
+                mmmmm = "0x01" if 'VEX' in prefix_type or 'EVEX' in prefix_type else "0x00"
+                cpu_flag = map_cpu_flag(isa)
 
-            instructions.append({
-                "mnemonic": instruction.name.lower(),  # Opcodes uses uppercase, normalize to lowercase
-                "operand_types": operand_types,
-                "operand_sizes": operand_sizes,
-                "opcode": opcode_bytes,
-                "needs_modrm": needs_modrm,
-                "modrm_reg": modrm_reg,
-                "prefix": prefix_type,
-                "pp": pp,
-                "mmmmm": mmmmm,
-                "cpu_flag": cpu_flag,
-            })
+                instructions.append({
+                    "mnemonic": instruction.name.lower(), # Opcodes uses uppercase, normalize to lowercase
+                    "operand_types": operand_types,
+                    "operand_sizes": operand_sizes,
+                    "opcode": opcode_bytes,
+                    "needs_modrm": needs_modrm,
+                    "prefix": prefix_type,
+                    "pp": pp,
+                    "mmmmm": mmmmm,
+                    "cpu_flag": cpu_flag,
+                    "reg_in_opcode": reg_in_opcode,
+                    "reg_in_modrm_reg": modrm_reg_operand is not None,
+                    "modrm_reg_operand": modrm_reg_operand if modrm_reg_operand is not None else 0xff,
+                    "reg_in_modrm_rm": modrm_rm_operand is not None,
+                    "modrm_rm_operand": modrm_rm_operand if modrm_rm_operand is not None else 0xff,
+                    "force_rex_w": force_rex_w,
+                })
 
     # Create output directory if it doesn’t exist
     if not os.path.exists(os.path.dirname(output_c_file_path)):
@@ -235,11 +257,16 @@ def generate_c_file(output_c_file_path: str) -> bool:
             f.write(f"        .opcode = {{ {', '.join(instruction['opcode'])} }},\n")
             f.write(f"        .opcode_len = {len(instruction['opcode'])},\n")
             f.write(f"        .needs_modrm = {str(instruction['needs_modrm']).lower()},\n")
-            f.write(f"        .modrm_reg = {instruction['modrm_reg']},\n")
             f.write(f"        .prefix = {instruction['prefix']},\n")
             f.write(f"        .pp = {instruction['pp']},\n")
             f.write(f"        .mmmmm = {instruction['mmmmm']},\n")
-            f.write(f"        .cpu_flag = {instruction['cpu_flag']}\n")
+            f.write(f"        .cpu_flag = {instruction['cpu_flag']},\n")
+            f.write(f"        .reg_in_opcode = {str(instruction['reg_in_opcode']).lower()},\n")
+            f.write(f"        .reg_in_modrm_reg = {str(instruction['reg_in_modrm_reg']).lower()},\n")
+            f.write(f"        .modrm_reg_operand = {str(instruction['modrm_reg_operand']).lower()},\n")
+            f.write(f"        .reg_in_modrm_rm = {str(instruction['reg_in_modrm_rm']).lower()},\n")
+            f.write(f"        .modrm_rm_operand = {str(instruction['modrm_rm_operand']).lower()},\n")
+            f.write(f"        .force_rex_w = {str(instruction['force_rex_w']).lower()},\n")
             f.write("    },\n")
 
         f.write("};\n")

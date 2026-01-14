@@ -222,9 +222,10 @@ typedef enum {
     SpasmCoffSectionHeaderFlag_MEM_EXECUTE = 0x20000000,
     // The section can be read.
     SpasmCoffSectionHeaderFlag_MEM_READ = 0x40000000,
-    // The section can be written to.
-    SpasmCoffSectionHeaderFlag_MEM_WRITE = 0x80000000,
 } SpasmCoffSectionHeaderFlag;
+
+// The section can be written to.
+#define SpasmCoffSectionHeaderFlag_MEM_WRITE 0x80000000
 
 /* Symbols, relocations and line numbers are 2 bytes packed */
 #pragma pack(push, 2)

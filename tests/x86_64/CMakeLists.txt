@@ -2,6 +2,8 @@
 # Copyright (c) 2025 - Present Romain Augier
 # All rights reserved.
 
+add_subdirectory(encoding)
+
 if(SPASM_WINDOWS)
     add_subdirectory(windows)
 elseif(SPASM_LINUX)

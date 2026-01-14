@@ -38,12 +38,12 @@ typedef struct
         uint8_t reg;
     };
 
-    union {
+    union { struct {
         uint8_t mem_reg;
         uint8_t mem_index;
         int32_t mem_displacement;
         uint8_t mem_scale;
-    };
+    }; };
 
     union {
         const char* data_id;
@@ -76,11 +76,11 @@ typedef struct
     .reg = (uint8_t)(r)})
 
 #define SpasmOpScalar(r) ((SpasmOperand){ \
-    .type = SpasmOperandType_Scalar,    \
+    .type = SpasmOperandType_Register,    \
     .reg = (uint8_t)(r)})
 
 #define SpasmOpVector(r) ((SpasmOperand){ \
-    .type = SpasmOperandType_Vector,    \
+    .type = SpasmOperandType_Register,    \
     .reg = (uint8_t)(r)})
 
 #define SpasmOpOPMask(r) ((SpasmOperand){ \

@@ -5,6 +5,8 @@
 #include "spasm/bytecode.h"
 #include "libromano/vector.h"
 
+#include <stdio.h>
+
 SpasmByteCode spasm_bytecode_new()
 {
     SpasmByteCode bytecode;
@@ -26,6 +28,8 @@ void spasm_bytecode_debug(SpasmByteCode* bytecode)
     }
 
     printf("\n");
+
+    fflush(stdout);
 }
 
 size_t spasm_bytecode_size(SpasmByteCode* bytecode)

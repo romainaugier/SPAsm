@@ -88,11 +88,16 @@ typedef struct
     uint8_t opcode[4];
     uint8_t opcode_len;
     uint8_t needs_modrm;
-    uint8_t modrm_reg;
     uint8_t prefix;
     uint8_t pp;
     uint8_t mmmmm;
     uint8_t cpu_flag;
+    bool reg_in_opcode;
+    bool reg_in_modrm_reg;
+    uint8_t modrm_reg_operand;
+    bool reg_in_modrm_rm;
+    uint8_t modrm_rm_operand;
+    bool force_rex_w;
 } Spasm_x86_64_InstructionInfo;
 
 SPASM_API bool spasm_x86_64_encode_instruction(SpasmInstruction* instr,
