@@ -33,17 +33,28 @@ SpasmInstructions spasm_instructions_new(void)
     return instructions;
 }
 
-SpasmOperand* spasm_instruction_has_data_operand(SpasmInstruction* instruction)
+SpasmOperand* spasm_instruction_has_operand_type(SpasmInstruction* instruction,
+                                                 SpasmOperandType type)
 {
     for(uint8_t i = 0; i < instruction->num_operands; i++)
     {
         SpasmOperand* operand = &instruction->operands[i];
 
-        if(operand->type == SpasmOperandType_Data)
+        if(operand->type == type)
             return operand;
     }
 
     return NULL;
+}
+
+SpasmOperand* spasm_instruction_has_data_operand(SpasmInstruction* instruction)
+{
+    return spasm_instruction_has_operand_type(instruction, SpasmOperandType_Data);
+}
+
+SpasmOperand* spasm_instruction_has_symbol_operand(SpasmInstruction* instruction)
+{
+    return spasm_instruction_has_operand_type(instruction, SpasmOperandType_Symbol);
 }
 
 void spasm_instructions_destroy(SpasmInstructions* instructions)

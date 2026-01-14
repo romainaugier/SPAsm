@@ -38,7 +38,10 @@ bool spasm_write_obj_file(const char* filename,
                           SpasmObjType obj_type)
 {
     SPASM_ASSERT(bytecode != NULL, "bytecode is NULL");
-    SPASM_ASSERT(symtable != NULL, "symtable is NULL");
+    SPASM_ASSERT(data != NULL, "data is NULL");
+
+    SPASM_UNUSED(filename);
+    SPASM_UNUSED(obj_type);
 
     /* TODO */
 

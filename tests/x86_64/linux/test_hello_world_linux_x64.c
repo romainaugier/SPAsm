@@ -4,7 +4,7 @@
 
 #include "spasm/abi.h"
 #include "spasm/instruction.h"
-#include "spasm/jit.h"
+#include "spasm/assembler.h"
 #include "spasm/operand.h"
 #include "spasm/register.h"
 #include "spasm/error.h"
@@ -19,7 +19,13 @@ int main(void)
     SpasmABI abi = spasm_get_current_abi();
     SpasmJitAssembler assembler = spasm_get_jit_assembler(abi);
 
-    SpasmData data = spasm_data_new();
+    SpasmData data;
+
+    if(!spasm_data_init(&data))
+    {
+        spasm_error("Error while initializing data");
+        return 1;
+    }
 
     spasm_data_add_bytes(&data,
                          "message",
@@ -46,7 +52,7 @@ int main(void)
                                  "mov",
                                  SpasmOpReg(SpasmRegister_x86_64_RDX),
                                  SpasmOpImm32(14));
-    spasm_instructions_push_back0(&instructions,
+    spasm_instructions_push_backz(&instructions,
                                   "syscall");
 
     /* Exit */
@@ -58,7 +64,7 @@ int main(void)
                                  "mov",
                                  SpasmOpReg(SpasmRegister_x86_64_RSI),
                                  SpasmOpImm32(0));
-    spasm_instructions_push_back0(&instructions,
+    spasm_instructions_push_backz(&instructions,
                                   "syscall");
 
     spasm_instructions_debug(&instructions, abi, 1);
@@ -69,7 +75,7 @@ int main(void)
     {
         spasm_error("Error when assembling instructions, check the log for more details");
 
-        spasm_data_destroy(&data);
+        spasm_data_release(&data);
         spasm_instructions_destroy(&instructions);
         spasm_bytecode_destroy(&bytecode);
 
@@ -83,7 +89,7 @@ int main(void)
     SPASM_ASSERT(vector_size(&bytecode.data) == result_size,
                  "Invalid bytecode size");
 
-    spasm_data_destroy(&data);
+    spasm_data_release(&data);
     spasm_instructions_destroy(&instructions);
     spasm_bytecode_destroy(&bytecode);
 

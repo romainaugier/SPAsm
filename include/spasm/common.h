@@ -107,7 +107,7 @@
 #define SPASM_LIB_ENTRY
 #define SPASM_LIB_EXIT
 #elif defined(SPASM_GCC)
-#define SPASM_FORCE_INLINE inline __attribute__((always_inline)) 
+#define SPASM_FORCE_INLINE inline __attribute__((always_inline))
 #define SPASM_LIB_ENTRY __attribute__((constructor))
 #define SPASM_LIB_EXIT __attribute__((destructor))
 #elif defined(SPASM_CLANG)
@@ -148,6 +148,8 @@
 
 #define SPASM_NOT_IMPLEMENTED fprintf(stderr, "Function " SPASM_FUNCTION " not implemented"); exit(1);
 
+#define SPASM_UNUSED(x) ((void)x)
+
 #if defined(SPASM_MSVC)
 #define SPASM_PACKED_STRUCT(__struct__) __pragma(pack(push, 1)) __struct__ __pragma(pack(pop))
 #elif defined(SPASM_GCC) || defined(SPASM_CLANG)
@@ -157,11 +159,11 @@
 #endif /* defined(SPASM_MSVC) */
 
 #if defined(SPASM_MSVC)
-#define dump_struct(s) 
+#define dump_struct(s)
 #elif defined(SPASM_CLANG)
 #define dump_struct(s) __builtin_dump_struct(s, printf)
 #elif defined(SPASM_GCC)
-#define dump_struct(s) 
+#define dump_struct(s)
 #endif /* defined(SPASM_MSVC) */
 
 #if defined(DEBUG_BUILD)
@@ -185,6 +187,6 @@
         {                                                                          \
             fprintf(stderr, "Cannot register function \""#__func__"\" in atexit"); \
             if(__exit__) exit(1);                                                  \
-        }                                                                                                                                                   
+        }
 
 #endif /* !defined(__SPASM) */

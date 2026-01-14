@@ -52,13 +52,23 @@ typedef enum {
     exported_symbols: symbols that are exported by the assembler
                       Stores a bytecode start,
                       and a vector of size_t bytecode offsets references
+
+    symbols_index: shared by all the tables to assign a unique index for each symbol
 */
 
 typedef struct
 {
-    size_t bytecode_start_offset;
-    Vector* bytecode_refs_offset;
+    size_t start_offset;
+    Vector* refs_offset;
+    uint32_t index;
 } SpasmExportSymbol;
+
+typedef struct
+{
+    void* runtime_address;
+    Vector* refs_offset;
+    uint32_t index;
+} SpasmExternSymbol;
 
 typedef struct
 {
@@ -67,9 +77,14 @@ typedef struct
     HashMap* bss;
     HashMap* extern_symbols;
     HashMap* export_symbols;
+
+    uint32_t symbols_index;
 } SpasmData;
 
-SPASM_API SpasmData spasm_data_new(void);
+/*
+ * Returns false on failure (memory allocation from HashMap members)
+ */
+SPASM_API bool spasm_data_init(SpasmData* data);
 
 SPASM_API void spasm_data_add_bytes(SpasmData* data,
                                     const char* data_name,
@@ -79,18 +94,50 @@ SPASM_API void spasm_data_add_bytes(SpasmData* data,
 
 SPASM_API uintptr_t spasm_data_get_jit_address(SpasmData* data, SpasmDataId data_name);
 
-SPASM_API void spasm_add_extern_symbol(SpasmData* data,
-                                        const char* symbol_name,
-                                        size_t bytecode_offset);
+SPASM_API size_t spasm_data_num_externs(SpasmData* data);
 
-SPASM_API void spasm_add_export_symbol(SpasmData* data,
-                                       const char* symbol_name,
-                                       size_t bytecode_start_offset);
+SPASM_API void spasm_data_add_extern_symbol(SpasmData* data,
+                                            const char* symbol_name,
+                                            size_t bytecode_offset);
 
-SPASM_API void spasm_add_export_symbol_ref(SpasmData* data,
-                                           const char* symbol_name,
-                                           size_t bytecode_offset);
+typedef struct
+{
+    const char* name;
+    uint32_t name_sz;
+    SpasmExternSymbol* symbol;
+    HashMapIterator hashmap_it;
+} SpasmDataExternSymbolIterator;
 
-SPASM_API void spasm_data_destroy(SpasmData* data);
+SPASM_API void spasm_data_extern_symbol_iterator_init(SpasmDataExternSymbolIterator* it);
+
+SPASM_API bool spasm_data_iterate_extern_symbols(SpasmData* data,
+                                                 SpasmDataExternSymbolIterator* it);
+
+SPASM_API size_t spasm_data_extern_num_relocations(SpasmData* data);
+
+SPASM_API size_t spasm_data_num_exports(SpasmData* data);
+
+SPASM_API void spasm_data_add_export_symbol(SpasmData* data,
+                                            const char* symbol_name,
+                                            size_t bytecode_start_offset);
+
+SPASM_API void spasm_data_add_export_symbol_ref(SpasmData* data,
+                                                const char* symbol_name,
+                                                size_t bytecode_offset);
+
+typedef struct
+{
+    const char* name;
+    uint32_t name_sz;
+    SpasmExportSymbol* symbol;
+    HashMapIterator hashmap_it;
+} SpasmDataExportSymbolIterator;
+
+SPASM_API void spasm_data_export_symbol_iterator_init(SpasmDataExportSymbolIterator* it);
+
+SPASM_API bool spasm_data_iterate_export_symbols(SpasmData* data,
+                                                 SpasmDataExportSymbolIterator* it);
+
+SPASM_API void spasm_data_release(SpasmData* data);
 
 #endif /* !defined(__SPASM_DATA) */

@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.15)
 project(spasm VERSION ${VERSION})
 
 option(ENABLE_X86_64 "Enable x86_64 backend" ON)
-#
+
 # off for now, will work on it when someone offers me a mac
 option(ENABLE_AARCH64 "Enable aarch64 backend" OFF)
 
@@ -39,6 +39,21 @@ endif()
 if(ENABLE_AARCH64)
     message(STATUS "Building aarch64 backend")
     add_subdirectory(aarch64)
+endif()
+
+# Maybe wrap this in a function ?
+set(SPASM_WINDOWS FALSE)
+set(SPASM_APPLE FALSE)
+set(SPASM_LINUX FALSE)
+
+if(WIN32)
+    set(SPASM_WINDOWS TRUE)
+elseif(UNIX)
+    if(APPLE)
+        set(SPASM_APPLE TRUE)
+    else()
+        set(SPASM_LINUX TRUE)
+    endif()
 endif()
 
 add_subdirectory(src)

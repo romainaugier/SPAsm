@@ -10,6 +10,7 @@
 
 #include "spasm/data.h"
 #include "spasm/bytecode.h"
+#include "spasm/abi.h"
 
 /*
  * See: https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#coff-file-header-object-and-image
@@ -27,7 +28,7 @@
 } SpasmCoffHeader;
 #pragma pack(pop)
 
-typedef enum : uint16_t {
+typedef enum {
     // The content of this field is assumed to be applicable to any machine type
     SpasmCoffMachineType_UNKNOWN = 0x0,
     // Alpha AXP, 32-bit address space
@@ -100,7 +101,7 @@ typedef enum : uint16_t {
     SpasmCoffMachineType_WCEMIPSV2 = 0x169,
 } SpasmCoffMachineType;
 
-typedef enum : uint16_t {
+typedef enum {
     // Image only, Windows CE, and Microsoft Windows NT and later. This indicates that the file does not contain base relocations and must therefore be loaded at its preferred base address. If the base address is not available, the loader reports an error. The default behavior of the linker is to strip base relocations from executable (EXE) files.
     SpasmCoffCharacteristics_RELOCS_STRIPPED = 0x0001,
     // Image only. This indicates that the image file is valid and can be run. If this flag is not set, it indicates a linker error.
@@ -152,7 +153,7 @@ typedef struct {
  * See: https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#section-table-section-headers
  */
 
-typedef enum : uint32_t {
+typedef enum {
     // The section should not be padded to the next boundary. This flag is obsolete and is replaced by SpasmCoffSectionHeaderFlag_ALIGN_1BYTES. This is valid only for object files.PE_NO_PAD
 	SpasmCoffSectionHeaderFlag_TY = 0x00000008,
     // The section contains executable code.
@@ -234,7 +235,7 @@ typedef struct {
 } SpasmCoffRelocation;
 #pragma pack(pop)
 
-typedef enum : uint16_t {
+typedef enum {
     // x64 Processors
 
     // The relocation is ignored.
@@ -384,7 +385,7 @@ typedef struct {
 } SpasmCoffSymbol;
 #pragma pack(pop)
 
-typedef enum : uint8_t {
+typedef enum {
     // A special symbol that represents the end of function, for debugging purposes.
     SpasmCoffStorageClass_END_OF_FUNCTION = 0xff,
     // No assigned storage class.
@@ -441,7 +442,7 @@ typedef enum : uint8_t {
     SpasmCoffStorageClass_CLR_TOKEN = 107,
 } SpasmCoffStorageClass;
 
-typedef enum : uint16_t {
+typedef enum {
     // No type information or unknown base type. Microsoft tools use this setting
     SpasmCoffSymbolType_NULL = 0,
     // No valid type; used with void pointers and functions
@@ -476,9 +477,11 @@ typedef enum : uint16_t {
     SpasmCoffSymbolType_DWORD = 15,
 } SpasmCoffSymbolType;
 
-uint8_t* spasm_generate_coff(SpasmByteCode* bytecode,
-                             SpasmData* data,
-                             SpasmCoffMachineType machine,
-                             size_t* out_size);
+SPASM_API SpasmCoffMachineType spasm_abi_to_coff_machine_type(SpasmABI abi);
+
+SPASM_API uint8_t* spasm_generate_coff(SpasmByteCode* bytecode,
+                                       SpasmData* data,
+                                       SpasmCoffMachineType machine,
+                                       size_t* out_size);
 
 #endif /* !defined(__SPASM_COFF) */

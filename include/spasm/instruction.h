@@ -33,7 +33,18 @@ SPASM_API SpasmInstructions spasm_instructions_new(void);
 /*
  * Returns NULL if no data operand is found
  */
+SPASM_API SpasmOperand* spasm_instruction_has_operand_type(SpasmInstruction* instruction,
+                                                           SpasmOperandType type);
+
+/*
+ * Returns NULL if no data operand is found
+ */
 SPASM_API SpasmOperand* spasm_instruction_has_data_operand(SpasmInstruction* instruction);
+
+/*
+ * Returns NULL if no symbol operand is found
+ */
+SPASM_API SpasmOperand* spasm_instruction_has_symbol_operand(SpasmInstruction* instruction);
 
 /*
  * Implementation of the instruction_push_back, use the macro instead
@@ -67,7 +78,7 @@ SPASM_API bool __spasm_instructions_push_back(SpasmInstructions* instructions,
 /*
  * Pushes and instruction without any operands
  */
-#define spasm_instructions_push_back0(instructions, mnemonic)  \
+#define spasm_instructions_push_backz(instructions, mnemonic)  \
      __spasm_instructions_push_back(instructions,              \
                                     mnemonic,                  \
                                     (uint8_t)strlen(mnemonic), \

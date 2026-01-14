@@ -8,6 +8,13 @@
 
 #if defined(SPASM_ENABLE_X86_64)
 
+/* Assembler */
+
+bool spasm_linux_x64_assembler(SpasmInstructions* instructions, SpasmByteCode* bytecode, SpasmData* data)
+{
+    return true;
+}
+
 /* JIT Assembler */
 
 bool spasm_linux_x64_jit(SpasmInstructions* instructions, SpasmByteCode* bytecode, SpasmData* data)
