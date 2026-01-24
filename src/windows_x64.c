@@ -37,7 +37,7 @@ bool spasm_windows_x64_assembler(SpasmInstructions* instructions,
         if(sym_name != NULL)
         {
             size_t offset = spasm_bytecode_size(bytecode) - 4;
-            spasm_data_add_extern_symbol(data, sym_name, offset);
+            spasm_data_add_extern_symbol(data, sym_name, 0, offset, SpasmReloctype_REL32);
         }
     }
 
@@ -45,7 +45,7 @@ bool spasm_windows_x64_assembler(SpasmInstructions* instructions,
     {
         spasm_warning("Could not find any exported symbol, adding symbol main starting at offset 0x0");
 
-        spasm_data_add_export_symbol(data, "main", 0);
+        spasm_data_add_export_symbol(data, "main", 4, 0);
     }
 
     return true;

@@ -45,6 +45,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #if INTPTR_MAX == INT64_MAX || defined(__x86_64__)
 #define SPASM_X64
@@ -188,5 +189,8 @@
             fprintf(stderr, "Cannot register function \""#__func__"\" in atexit"); \
             if(__exit__) exit(1);                                                  \
         }
+
+#define SPASM_MAX(lhs, rhs) ((lhs) > (rhs) ? (lhs) : (rhs))
+#define SPASM_MIN(lhs, rhs) ((lhs) < (rhs) ? (lhs) : (rhs))
 
 #endif /* !defined(__SPASM) */

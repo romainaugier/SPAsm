@@ -1,3 +1,7 @@
+; SPDX-License-Identifier: BSD-3-Clause
+; Copyright (c) 2025 - Present Romain Augier
+; All rights reserved.
+
 ; .const section is just used to place numeric variables that will be replaced in the assembly
 ; by the numeric values, think like macros
 .const

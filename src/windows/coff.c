@@ -139,7 +139,7 @@ uint8_t* spasm_generate_coff(SpasmByteCode* bytecode,
     while(spasm_data_iterate_extern_symbols(data, &extern_it))
     {
         string_table_size += extern_it.name_sz >= 8 ? (size_t)extern_it.name_sz + 1 : 0;
-        num_relocs += vector_size(extern_it.symbol->refs_offset);
+        num_relocs += vector_size(extern_it.symbol->refs);
     }
 
     SpasmDataExportSymbolIterator export_it;
@@ -148,7 +148,7 @@ uint8_t* spasm_generate_coff(SpasmByteCode* bytecode,
     while(spasm_data_iterate_export_symbols(data, &export_it))
     {
         string_table_size += export_it.name_sz >= 8 ? (size_t)export_it.name_sz  + 1: 0;
-        num_relocs += vector_size(export_it.symbol->refs_offset);
+        num_relocs += vector_size(export_it.symbol->refs);
     }
 
     size_t header_offset = 0;
@@ -209,15 +209,15 @@ uint8_t* spasm_generate_coff(SpasmByteCode* bytecode,
     {
         uint32_t symbol_index = global_symbol_index + export_it.symbol->index;
 
-        for(size_t i = 0; i < vector_size(export_it.symbol->refs_offset); i++)
+        for(size_t i = 0; i < vector_size(export_it.symbol->refs); i++)
         {
-            relocs[reloc_idx].virtual_address = *((uint32_t*)vector_at(export_it.symbol->refs_offset, i));
+            SpasmExportSymbolRef* ref = (SpasmExportSymbolRef*)vector_at(export_it.symbol->refs, i);
+
+            relocs[reloc_idx].virtual_address = (uint32_t)ref->offset;
             relocs[reloc_idx].symbol_table_index = symbol_index;
-            /*
-                * TODO: Change this and add the relocation type in the assembler
-                * Store the type along with the offset as a pair/small struct
-                */
-            relocs[reloc_idx].type = SpasmCoffRelocationType_AMD64_REL32;
+            relocs[reloc_idx].type = spasm_reloc_to_coff_reloc(ref->reloc_type,
+                                                               machine);
+
             reloc_idx++;
         }
 
@@ -256,15 +256,15 @@ uint8_t* spasm_generate_coff(SpasmByteCode* bytecode,
     {
         uint32_t symbol_index = global_symbol_index + extern_it.symbol->index;
 
-        for(size_t i = 0; i < vector_size(extern_it.symbol->refs_offset); i++)
+        for(size_t i = 0; i < vector_size(extern_it.symbol->refs); i++)
         {
-            relocs[reloc_idx].virtual_address = *((uint32_t*)vector_at(extern_it.symbol->refs_offset, i));
+            SpasmExternSymbolRef* ref = (SpasmExternSymbolRef*)vector_at(extern_it.symbol->refs, i);
+
+            relocs[reloc_idx].virtual_address = (uint32_t)ref->offset;
             relocs[reloc_idx].symbol_table_index = symbol_index;
-            /*
-             * TODO: Change this and add the relocation type in the assembler
-             * Store the type along with the offset as a pair/small struct
-             */
-            relocs[reloc_idx].type = SpasmCoffRelocationType_AMD64_REL32;
+            relocs[reloc_idx].type = spasm_reloc_to_coff_reloc(ref->reloc_type,
+                                                               machine);
+
             reloc_idx++;
         }
 
