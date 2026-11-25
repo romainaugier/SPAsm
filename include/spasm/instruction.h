@@ -14,12 +14,20 @@
 #include "libromano/arena.h"
 #include "libromano/vector.h"
 
+typedef enum
+{
+    SpasmInstructionKind_Instruction,
+    SpasmInstructionKind_Label,
+} SpasmInstructionKind;
+
 typedef SPASM_PACKED_STRUCT(struct
 {
-    const char* mnemonic;
+    const char* mnemonic; /* The name of the label for labels */
     SpasmOperand* operands;
+    uint32_t line; /* Source line, 0 when unknown */
     uint8_t mnemonic_len;
     uint8_t num_operands;
+    uint8_t kind; /* SpasmInstructionKind */
 }) SpasmInstruction;
 
 typedef struct
@@ -29,6 +37,40 @@ typedef struct
 } SpasmInstructions;
 
 SPASM_API SpasmInstructions spasm_instructions_new(void);
+
+/* Returns true if the mnemonic is an instruction of an enabled backend (case-insensitive) */
+SPASM_API bool spasm_mnemonic_exists(const char* mnemonic, size_t mnemonic_len);
+
+SPASM_API size_t spasm_instructions_size(SpasmInstructions* instructions);
+
+SPASM_API SpasmInstruction* spasm_instructions_at(SpasmInstructions* instructions, size_t index);
+
+/*
+ * Pushes an instruction, the mnemonic and the operands are copied.
+ * Returns NULL if the mnemonic is longer than 255 characters
+ */
+SPASM_API SpasmInstruction* spasm_instructions_push(SpasmInstructions* instructions,
+                                                    const char* mnemonic,
+                                                    size_t mnemonic_len,
+                                                    const SpasmOperand* operands,
+                                                    uint8_t num_operands,
+                                                    uint32_t line);
+
+/*
+ * Pushes a label at the current position, the name is copied.
+ * Returns NULL if the name is longer than 255 characters
+ */
+SPASM_API SpasmInstruction* spasm_instructions_push_label(SpasmInstructions* instructions,
+                                                          const char* name,
+                                                          size_t name_len,
+                                                          uint32_t line);
+
+/*
+ * Returns a null-terminated copy of s, living as long as the instructions (symbol names of operands)
+ */
+SPASM_API const char* spasm_instructions_copy_string(SpasmInstructions* instructions,
+                                                     const char* s,
+                                                     size_t s_len);
 
 /*
  * Returns NULL if no data operand is found

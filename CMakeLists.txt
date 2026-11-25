@@ -57,6 +57,7 @@ elseif(UNIX)
 endif()
 
 add_subdirectory(src)
+add_subdirectory(app)
 
 if(RUN_TESTS EQUAL 1)
     add_subdirectory(tests)

@@ -8,6 +8,8 @@
 #include "libromano/vector.h"
 #include "spasm/error.h"
 
+#include "libromano/memory.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -43,6 +45,16 @@ bool spasm_data_init(SpasmData* data)
     if(data->intern_symbols == NULL)
         return false;
 
+    vector_init(&data->definitions, 16, sizeof(SpasmDataDefinition));
+
+    if(data->definitions.data == NULL)
+        return false;
+
+    data->definitions_index = hashmap_new(16);
+
+    if(data->definitions_index == NULL)
+        return false;
+
     data->symbols_index = 0;
 
     return true;
@@ -54,18 +66,79 @@ void spasm_data_add_bytes(SpasmData* data,
                           size_t data_sz,
                           SpasmDataType type)
 {
-    uint32_t data_name_sz = (uint32_t)strlen(data_name);
+    spasm_data_add(data, data_name, (uint32_t)strlen(data_name), bytes, data_sz, type, 1);
+}
+
+bool spasm_data_add(SpasmData* data,
+                    const char* name,
+                    uint32_t name_sz,
+                    const uint8_t* bytes,
+                    size_t size,
+                    SpasmDataType type,
+                    uint32_t alignment)
+{
+    SPASM_ASSERT(data != NULL, "data is NULL");
+    SPASM_ASSERT(alignment != 0 && (alignment & (alignment - 1)) == 0, "alignment must be a power of 2");
+
+    if(spasm_data_find_definition(data, name, name_sz) != NULL)
+        return false;
 
     switch(type)
     {
         case SpasmDataType_Data:
-            hashmap_insert(data->data, data_name, data_name_sz, (void*)bytes, (uint32_t)data_sz);
+            hashmap_insert(data->data, name, name_sz, (void*)bytes, (uint32_t)size);
             break;
         case SpasmDataType_ROData:
-            hashmap_insert(data->rodata, data_name, data_name_sz, (void*)bytes, (uint32_t)data_sz);
+            hashmap_insert(data->rodata, name, name_sz, (void*)bytes, (uint32_t)size);
             break;
         default:
             break;
+    }
+
+    SpasmDataDefinition definition;
+    definition.name = romano_strndup(name, name_sz);
+    definition.name_sz = name_sz;
+    definition.alignment = alignment;
+    definition.size = size;
+    definition.type = type;
+
+    const size_t index = vector_size(&data->definitions);
+
+    vector_push_back(&data->definitions, &definition);
+    hashmap_insert(data->definitions_index, name, name_sz, (void*)&index, (uint32_t)sizeof(size_t));
+
+    return true;
+}
+
+size_t spasm_data_num_definitions(SpasmData* data)
+{
+    return vector_size(&data->definitions);
+}
+
+const SpasmDataDefinition* spasm_data_get_definition(SpasmData* data, size_t index)
+{
+    return (const SpasmDataDefinition*)vector_at(&data->definitions, index);
+}
+
+const SpasmDataDefinition* spasm_data_find_definition(SpasmData* data,
+                                                      const char* name,
+                                                      uint32_t name_sz)
+{
+    const size_t* index = (const size_t*)hashmap_get(data->definitions_index, name, name_sz, NULL);
+
+    return index != NULL ? (const SpasmDataDefinition*)vector_at(&data->definitions, *index) : NULL;
+}
+
+const uint8_t* spasm_data_get_bytes(SpasmData* data, const SpasmDataDefinition* definition)
+{
+    switch(definition->type)
+    {
+        case SpasmDataType_Data:
+            return (const uint8_t*)hashmap_get(data->data, definition->name, definition->name_sz, NULL);
+        case SpasmDataType_ROData:
+            return (const uint8_t*)hashmap_get(data->rodata, definition->name, definition->name_sz, NULL);
+        default:
+            return NULL;
     }
 }
 
@@ -376,6 +449,12 @@ void spasm_data_release(SpasmData* data)
     hashmap_free(data->rodata);
     hashmap_free(data->data);
     hashmap_free(data->bss);
+
+    for(size_t i = 0; i < vector_size(&data->definitions); i++)
+        romano_free(((SpasmDataDefinition*)vector_at(&data->definitions, i))->name);
+
+    vector_release(&data->definitions);
+    hashmap_free(data->definitions_index);
 
     SpasmDataExternSymbolIterator extern_it;
     spasm_data_extern_symbol_iterator_init(&extern_it);

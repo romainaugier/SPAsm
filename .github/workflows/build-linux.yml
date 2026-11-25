@@ -21,11 +21,11 @@ jobs:
           sudo apt-get install -y gperf llvm
           pip install --break-system-packages Opcodes==0.3.14
 
-      - name: Check the generated x86_64 tables are up to date
+      - name: Check the generated tables are up to date
         run: |
           python3 x86_64/generate.py -o x86_64_instructions.c
-          python3 x86_64/generate.py --gperf-only
-          git diff --exit-code -- x86_64
+          python3 scripts/gperf.py
+          git diff --exit-code -- x86_64 src
 
       - name: Build libromano
         run: |
@@ -37,7 +37,7 @@ jobs:
       - name: Build and test (debug, address sanitizer)
         run: ./build.sh --tests --debug
 
-      - name: Differential test against llvm-mc
+      - name: Differential test against llvm-mc and parser round trip
         run: |
           cd build
-          ctest -R x86_64_difftest --no-tests=error --output-on-failure
+          ctest -R "x86_64_difftest|x86_64_parser_roundtrip" --no-tests=error --output-on-failure

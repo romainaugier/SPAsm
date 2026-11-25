@@ -10,23 +10,18 @@
 import sys
 import os
 import optparse
-import subprocess
 import copy
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 from opcodes import x86_64
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+
+import gperf
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 MNEMONICS_GPERF_FILE = "x86_64_mnemonics.gperf"
-
-# -m 100 lets gperf search for a denser hash table (smaller word array).
-# The mnemonics are too similar for a dense perfect hash, so we allow duplicate hash values
-# (-D, resolved by a short linear scan): 19KB of tables instead of 49KB
-GPERF_FILES = {
-    "x86_64_registers.gperf": ["-m", "100"],
-    MNEMONICS_GPERF_FILE: ["-m", "100", "-k1-4,$", "-D"],
-}
 
 # Must match Spasm_x86_64_OperandKind in include/spasm/x86_64.h
 OPERAND_KINDS = {
@@ -595,27 +590,7 @@ def generate_mnemonics_gperf(forms: List[Form]) -> bool:
         f.write("    return keyword;\n")
         f.write("}\n")
 
-    return run_gperf(MNEMONICS_GPERF_FILE)
-
-def run_gperf(gperf_file_name: str) -> bool:
-    output_c_file_name = os.path.splitext(gperf_file_name)[0] + ".c"
-
-    cmd = ["gperf"] + GPERF_FILES[gperf_file_name] + [f"--output-file={output_c_file_name}", gperf_file_name]
-
-    # Run from the script directory so the generated header only holds relative paths
-    try:
-        subprocess.run(cmd, check=True, cwd=SCRIPT_DIR, capture_output=True, text=True)
-    except OSError as err:
-        print(f"Error: cannot run gperf: {err}")
-        return False
-    except subprocess.CalledProcessError as err:
-        print(f"Error: gperf failed on {gperf_file_name}:\n{err.stderr}")
-        return False
-
-    return True
-
-def run_all_gperf() -> bool:
-    return all(run_gperf(f) for f in GPERF_FILES)
+    return gperf.run_gperf(f"x86_64/{MNEMONICS_GPERF_FILE}")
 
 def main() -> int:
     parser = optparse.OptionParser()
@@ -624,8 +599,9 @@ def main() -> int:
 
     options, _ = parser.parse_args()
 
+    # Regenerates every gperf table of the repository, see scripts/gperf.py
     if options.gperf_only:
-        return 0 if run_all_gperf() else 1
+        return 0 if gperf.run_all() else 1
 
     if options.output_c_file is None:
         print("Error: you need to specify the output c file path using -o/--output option")

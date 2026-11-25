@@ -97,11 +97,23 @@ typedef struct
     Vector* refs;
 } SpasmInternSymbol;
 
+/* A named data block, in definition order (Spasm_Data.definitions) */
+typedef struct
+{
+    char* name;
+    uint32_t name_sz;
+    uint32_t alignment;
+    size_t size;
+    SpasmDataType type;
+} SpasmDataDefinition;
+
 typedef struct
 {
     HashMap* rodata;
     HashMap* data;
     HashMap* bss;
+    Vector definitions;
+    HashMap* definitions_index; /* name -> index in definitions */
     HashMap* extern_symbols;
     HashMap* export_symbols;
     HashMap* intern_symbols;
@@ -119,6 +131,31 @@ SPASM_API void spasm_data_add_bytes(SpasmData* data,
                                     uint8_t* bytes,
                                     size_t data_sz,
                                     SpasmDataType type);
+
+/*
+ * Adds a named data block aligned on alignment bytes (a power of 2). bytes can be NULL for bss.
+ * Returns false if a block with the same name already exists
+ */
+SPASM_API bool spasm_data_add(SpasmData* data,
+                              const char* name,
+                              uint32_t name_sz,
+                              const uint8_t* bytes,
+                              size_t size,
+                              SpasmDataType type,
+                              uint32_t alignment);
+
+/* Data blocks in definition order */
+SPASM_API size_t spasm_data_num_definitions(SpasmData* data);
+
+SPASM_API const SpasmDataDefinition* spasm_data_get_definition(SpasmData* data, size_t index);
+
+/* Returns NULL if not found */
+SPASM_API const SpasmDataDefinition* spasm_data_find_definition(SpasmData* data,
+                                                                const char* name,
+                                                                uint32_t name_sz);
+
+/* Bytes of a rodata/data block, NULL for bss blocks or if not found */
+SPASM_API const uint8_t* spasm_data_get_bytes(SpasmData* data, const SpasmDataDefinition* definition);
 
 SPASM_API uintptr_t spasm_data_get_jit_address(SpasmData* data, SpasmDataId data_name);
 

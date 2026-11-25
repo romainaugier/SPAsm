@@ -215,6 +215,17 @@ SPASM_API extern const size_t spasm_x86_64_forms_count;
 
 SPASM_API const char* spasm_x86_64_get_register_as_string(SpasmRegister reg);
 
+#define SPASM_X86_64_MAX_INSTRUCTION_SIZE 15
+
+/* Encodes into out (at least SPASM_X86_64_MAX_INSTRUCTION_SIZE bytes), the size goes in out_size */
+SPASM_API bool spasm_x86_64_encode_instruction_to(SpasmInstruction* instr, SpasmByte* out, uint32_t* out_size);
+
+/* Returns true if the mnemonic has relative forms (jumps, calls, loops), and which widths it has */
+SPASM_API bool spasm_x86_64_is_branch_mnemonic(const char* mnemonic,
+                                               size_t mnemonic_len,
+                                               bool* has_rel8,
+                                               bool* has_rel32);
+
 SPASM_API bool spasm_x86_64_encode_instruction(SpasmInstruction* instr,
                                                SpasmByteCode* out);
 

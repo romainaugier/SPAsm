@@ -22,6 +22,8 @@ SPASM_API SpasmByteCode spasm_bytecode_new(void);
 
 SPASM_API void spasm_bytecode_push_back(SpasmByteCode* bytecode, SpasmByte byte);
 
+SPASM_API void spasm_bytecode_push_bytes(SpasmByteCode* bytecode, const SpasmByte* bytes, size_t count);
+
 SPASM_API void spasm_bytecode_debug(SpasmByteCode* bytecode);
 
 SPASM_API size_t spasm_bytecode_size(SpasmByteCode* bytecode);

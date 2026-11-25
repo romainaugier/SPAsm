@@ -39,6 +39,9 @@ int main(void)
           { 0x62, 0xF1, 0x6C, 0x18, 0x5F, 0xCB }, 6 },
         { "vcvtsi2ss", { REG(XMM1), REG(XMM2), REG(EAX), SpasmOpRounding(SpasmRounding_Nearest) }, 4,
           { 0x62, 0xF1, 0x6E, 0x18, 0x2A, 0xC8 }, 6 },
+        /* The rounding operand can be anywhere (llvm-mc order) */
+        { "vcvtsi2ss", { REG(XMM1), REG(XMM2), SpasmOpRounding(SpasmRounding_Nearest), REG(EAX) }, 4,
+          { 0x62, 0xF1, 0x6E, 0x18, 0x2A, 0xC8 }, 6 },
         /* xmm16-31 need EVEX, with a compressed disp8 (256 / 16) */
         { "vaddps", { REG(XMM17), REG(XMM2), SpasmOpMemory(R(RAX), R(NONE), 256, 1) }, 3,
           { 0x62, 0xE1, 0x6C, 0x08, 0x58, 0x48, 0x10 }, 7 },

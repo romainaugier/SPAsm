@@ -20,6 +20,12 @@ void spasm_bytecode_push_back(SpasmByteCode* bytecode, SpasmByte byte)
     vector_push_back(&bytecode->data, &byte);
 }
 
+void spasm_bytecode_push_bytes(SpasmByteCode* bytecode, const SpasmByte* bytes, size_t count)
+{
+    for(size_t i = 0; i < count; i++)
+        vector_push_back(&bytecode->data, (void*)&bytes[i]);
+}
+
 void spasm_bytecode_debug(SpasmByteCode* bytecode)
 {
     for(size_t i = 0; i < vector_size(&bytecode->data); i++)

@@ -5,6 +5,7 @@
 #include "spasm/instruction.h"
 #include "spasm/x86_64.h"
 #include "spasm/data.h"
+#include "spasm/error.h"
 
 #if defined(SPASM_ENABLE_X86_64)
 
@@ -24,6 +25,13 @@ bool spasm_linux_x64_jit(SpasmInstructions* instructions, SpasmByteCode* bytecod
     for(size_t i = 0; i < vector_size(&instructions->instructions); i++)
     {
         SpasmInstruction* instr = *(SpasmInstruction**)vector_at(&instructions->instructions, i);
+
+        if(instr->kind == SpasmInstructionKind_Label)
+        {
+            spasm_error("line %u: labels are only supported by the flat assembler (spasm_assemble_flat) for now",
+                        instr->line);
+            return false;
+        }
 
         SpasmOperand* data_operand = spasm_instruction_has_data_operand(instr);
 

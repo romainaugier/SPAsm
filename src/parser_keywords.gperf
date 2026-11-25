@@ -1,0 +1,84 @@
+%{
+/* SPDX-License-Identifier: BSD-3-Clause */
+/* Copyright (c) 2025 - Present Romain Augier */
+/* All rights reserved. */
+
+/*
+    gperf source of the assembly syntax keywords, regenerate parser_keywords.c with:
+    python scripts/gperf.py src/parser_keywords.gperf
+*/
+
+#include "spasm/parser_keywords.h"
+#include "spasm/operand.h"
+
+#include <string.h>
+%}
+%language=ANSI-C
+%struct-type
+%omit-struct-type
+%readonly-tables
+%global-table
+%pic
+%ignore-case
+%compare-strncmp
+%define hash-function-name spasm_parser_keyword_hash
+%define lookup-function-name spasm_parser_keyword_lookup
+%define string-pool-name spasm_parser_keyword_strings
+%define word-array-name spasm_parser_keyword_words
+%define constants-prefix SPASM_PARSER_KEYWORD_
+struct SpasmParserKeyword;
+%%
+.text, SpasmParserKeywordKind_Directive, SpasmParserDirective_Text
+.data, SpasmParserKeywordKind_Directive, SpasmParserDirective_Data
+.rodata, SpasmParserKeywordKind_Directive, SpasmParserDirective_RoData
+.rdata, SpasmParserKeywordKind_Directive, SpasmParserDirective_RoData
+.bss, SpasmParserKeywordKind_Directive, SpasmParserDirective_Bss
+.section, SpasmParserKeywordKind_Directive, SpasmParserDirective_Section
+.global, SpasmParserKeywordKind_Directive, SpasmParserDirective_Global
+.globl, SpasmParserKeywordKind_Directive, SpasmParserDirective_Global
+.extern, SpasmParserKeywordKind_Directive, SpasmParserDirective_Extern
+.byte, SpasmParserKeywordKind_Directive, SpasmParserDirective_Byte
+.word, SpasmParserKeywordKind_Directive, SpasmParserDirective_Word
+.short, SpasmParserKeywordKind_Directive, SpasmParserDirective_Word
+.2byte, SpasmParserKeywordKind_Directive, SpasmParserDirective_Word
+.dword, SpasmParserKeywordKind_Directive, SpasmParserDirective_Dword
+.long, SpasmParserKeywordKind_Directive, SpasmParserDirective_Dword
+.int, SpasmParserKeywordKind_Directive, SpasmParserDirective_Dword
+.4byte, SpasmParserKeywordKind_Directive, SpasmParserDirective_Dword
+.qword, SpasmParserKeywordKind_Directive, SpasmParserDirective_Qword
+.quad, SpasmParserKeywordKind_Directive, SpasmParserDirective_Qword
+.8byte, SpasmParserKeywordKind_Directive, SpasmParserDirective_Qword
+.ascii, SpasmParserKeywordKind_Directive, SpasmParserDirective_Ascii
+.asciz, SpasmParserKeywordKind_Directive, SpasmParserDirective_Asciz
+.string, SpasmParserKeywordKind_Directive, SpasmParserDirective_Asciz
+.zero, SpasmParserKeywordKind_Directive, SpasmParserDirective_Zero
+.skip, SpasmParserKeywordKind_Directive, SpasmParserDirective_Zero
+.space, SpasmParserKeywordKind_Directive, SpasmParserDirective_Zero
+.align, SpasmParserKeywordKind_Directive, SpasmParserDirective_Align
+.balign, SpasmParserKeywordKind_Directive, SpasmParserDirective_Align
+.p2align, SpasmParserKeywordKind_Directive, SpasmParserDirective_P2Align
+.equ, SpasmParserKeywordKind_Directive, SpasmParserDirective_Equ
+.set, SpasmParserKeywordKind_Directive, SpasmParserDirective_Equ
+.intel_syntax, SpasmParserKeywordKind_Directive, SpasmParserDirective_IntelSyntax
+.att_syntax, SpasmParserKeywordKind_Directive, SpasmParserDirective_AttSyntax
+byte, SpasmParserKeywordKind_Size, 1
+word, SpasmParserKeywordKind_Size, 2
+dword, SpasmParserKeywordKind_Size, 4
+qword, SpasmParserKeywordKind_Size, 8
+xmmword, SpasmParserKeywordKind_Size, 16
+oword, SpasmParserKeywordKind_Size, 16
+ymmword, SpasmParserKeywordKind_Size, 32
+zmmword, SpasmParserKeywordKind_Size, 64
+ptr, SpasmParserKeywordKind_Ptr, 0
+rn-sae, SpasmParserKeywordKind_Rounding, SpasmRounding_Nearest
+rd-sae, SpasmParserKeywordKind_Rounding, SpasmRounding_Down
+ru-sae, SpasmParserKeywordKind_Rounding, SpasmRounding_Up
+rz-sae, SpasmParserKeywordKind_Rounding, SpasmRounding_Zero
+sae, SpasmParserKeywordKind_Rounding, SpasmRounding_SAE
+z, SpasmParserKeywordKind_Zeroing, 0
+1to2, SpasmParserKeywordKind_Broadcast, 2
+1to4, SpasmParserKeywordKind_Broadcast, 4
+1to8, SpasmParserKeywordKind_Broadcast, 8
+1to16, SpasmParserKeywordKind_Broadcast, 16
+1to32, SpasmParserKeywordKind_Broadcast, 32
+%%

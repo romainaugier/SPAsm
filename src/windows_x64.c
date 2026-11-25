@@ -18,6 +18,13 @@ bool spasm_windows_x64_assembler(SpasmInstructions* instructions,
     {
         SpasmInstruction* instr = *(SpasmInstruction**)vector_at(&instructions->instructions, i);
 
+        if(instr->kind == SpasmInstructionKind_Label)
+        {
+            spasm_error("line %u: labels are only supported by the flat assembler (spasm_assemble_flat) for now",
+                        instr->line);
+            return false;
+        }
+
         SpasmOperand* sym_op = spasm_instruction_has_symbol_operand(instr);
         const char* sym_name = NULL;
 
@@ -61,6 +68,13 @@ bool spasm_windows_x64_jit(SpasmInstructions* instructions, SpasmByteCode* bytec
     for(size_t i = 0; i < vector_size(&instructions->instructions); i++)
     {
         SpasmInstruction* instr = *(SpasmInstruction**)vector_at(&instructions->instructions, i);
+
+        if(instr->kind == SpasmInstructionKind_Label)
+        {
+            spasm_error("line %u: labels are only supported by the flat assembler (spasm_assemble_flat) for now",
+                        instr->line);
+            return false;
+        }
 
         SpasmOperand* sym_op = spasm_instruction_has_symbol_operand(instr);
 

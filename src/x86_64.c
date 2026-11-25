@@ -311,6 +311,12 @@ size_t spasm_x86_64_operand_debug(SpasmOperand* operand, char* fmt_buf, size_t m
                 separator = " + ";
             }
 
+            if(operand->symbol_name != NULL)
+            {
+                sz += (size_t)snprintf(fmt_buf + sz, max_fmt_sz - sz, "%s%s", separator, operand->symbol_name);
+                separator = " + ";
+            }
+
             if(operand->mem_displacement != 0 || separator[0] == '\0')
                 sz += (size_t)snprintf(fmt_buf + sz,
                                        max_fmt_sz - sz,
@@ -357,6 +363,9 @@ size_t spasm_x86_64_instruction_debug(SpasmInstruction* instr, char* fmt_buf, si
 {
     size_t sz = 0;
 
+    if(instr->kind == SpasmInstructionKind_Label)
+        return (size_t)snprintf(fmt_buf, max_fmt_sz, "%.*s:", instr->mnemonic_len, instr->mnemonic);
+
     sz += (size_t)snprintf(fmt_buf + sz,
                            max_fmt_sz - sz,
                            "%.*s ",
@@ -382,17 +391,17 @@ void spasm_x86_64_instructions_debug(SpasmInstructions* instructions, int32_t fd
     {
         SpasmInstruction* instr = *(SpasmInstruction**)vector_at(&instructions->instructions, i);
 
-        buffer_size += spasm_x86_64_instruction_debug(instr, buffer + buffer_size, 128);
-
-        if(buffer_size >= ((size_t)((float)buffer_capacity * 0.90f)))
+        /* A label is at most 256 characters, an instruction is truncated to 512 */
+        if(buffer_capacity - buffer_size < 520)
         {
             buffer_capacity <<= 1;
             buffer = (char*)realloc(buffer, buffer_capacity);
         }
 
-        snprintf(buffer + buffer_size, 3, "\n\r");
+        const size_t instr_size = spasm_x86_64_instruction_debug(instr, buffer + buffer_size, 512);
 
-        buffer_size++;
+        buffer_size += instr_size < 512 ? instr_size : 511;
+        buffer[buffer_size++] = '\n';
     }
 
 #if defined(SPASM_MSVC)
@@ -432,8 +441,6 @@ void spasm_x86_64_instructions_debug(SpasmInstructions* instructions, int32_t fd
     +------------+----------+-----------+-----------+-----------+------------+------------+-------------+-------------+-------------+----------------+----------------+--------------+
 
 */
-
-#define SPASM_X86_64_MAX_INSTRUCTION_SIZE 15
 
 typedef struct
 {
@@ -754,27 +761,16 @@ static bool spasm_x86_64_has_high_byte_conflict(const Spasm_x86_64_Form* form, c
 
 /*
     The rounding operand is not an operand kind of the form: it is accepted by the forms flagged ER
-    ({rn-sae}...) or SAE ({sae}), before the immediate or last (vcmpps k1, zmm1, zmm2, {sae}, 0)
+    ({rn-sae}...) or SAE ({sae}), at any position (Intel puts it last or before the immediate,
+    llvm-mc before the general purpose source of vcvtsi2ss)
 */
-static bool spasm_x86_64_rounding_matches(const Spasm_x86_64_Form* form,
-                                          const SpasmOperand* rounding,
-                                          uint8_t rounding_index)
+static bool spasm_x86_64_rounding_matches(const Spasm_x86_64_Form* form, const SpasmOperand* rounding)
 {
     if(rounding == NULL)
         return true;
 
-    if(rounding->imm_value == SpasmRounding_SAE ? !(form->evex & Spasm_x86_64_EvexFlag_SAE) :
-                                                  !(form->evex & Spasm_x86_64_EvexFlag_ER))
-        return false;
-
-    uint8_t position = 0;
-
-    while(position < 4 &&
-          form->operands[position] != Spasm_x86_64_OperandKind_NONE &&
-          form->operands[position] != Spasm_x86_64_OperandKind_IMM8)
-        position++;
-
-    return position == rounding_index;
+    return rounding->imm_value == SpasmRounding_SAE ? (form->evex & Spasm_x86_64_EvexFlag_SAE) != 0 :
+                                                      (form->evex & Spasm_x86_64_EvexFlag_ER) != 0;
 }
 
 static bool spasm_x86_64_form_matches(const Spasm_x86_64_Form* form, const SpasmInstruction* instr)
@@ -950,7 +946,7 @@ static bool spasm_x86_64_encode_memory(const SpasmOperand* mem,
 
     if(disp == 0 && base_code != 0x5)
         mod = 0x0;
-    else if(spasm_x86_64_fits_disp8(disp, disp8_shift))
+    else if(!mem->mem_disp32 && spasm_x86_64_fits_disp8(disp, disp8_shift))
         mod = 0x1;
     else
         mod = 0x2;
@@ -1255,7 +1251,45 @@ static bool spasm_x86_64_swap_vex_sources(const Spasm_x86_64_Form* form,
     return true;
 }
 
+bool spasm_x86_64_is_branch_mnemonic(const char* mnemonic,
+                                     size_t mnemonic_len,
+                                     bool* has_rel8,
+                                     bool* has_rel32)
+{
+    const Spasm_x86_64_MnemonicKeyword* keyword = spasm_x86_64_mnemonic_lookup(mnemonic, mnemonic_len);
+
+    *has_rel8 = false;
+    *has_rel32 = false;
+
+    if(keyword == NULL)
+        return false;
+
+    for(uint32_t i = keyword->first; i < (uint32_t)(keyword->first + keyword->count); i++)
+    {
+        for(uint32_t j = 0; j < 4; j++)
+        {
+            *has_rel8 |= spasm_x86_64_forms[i].operands[j] == Spasm_x86_64_OperandKind_REL8;
+            *has_rel32 |= spasm_x86_64_forms[i].operands[j] == Spasm_x86_64_OperandKind_REL32;
+        }
+    }
+
+    return *has_rel8 || *has_rel32;
+}
+
 bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out)
+{
+    SpasmByte bytes[SPASM_X86_64_MAX_INSTRUCTION_SIZE];
+    uint32_t size;
+
+    if(!spasm_x86_64_encode_instruction_to(instr, bytes, &size))
+        return false;
+
+    spasm_bytecode_push_bytes(out, bytes, size);
+
+    return true;
+}
+
+bool spasm_x86_64_encode_instruction_to(SpasmInstruction* instr, SpasmByte* out, uint32_t* out_size)
 {
     const Spasm_x86_64_MnemonicKeyword* mnemonic = spasm_x86_64_mnemonic_lookup(instr->mnemonic,
                                                                                 instr->mnemonic_len);
@@ -1280,7 +1314,6 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
     SpasmOperand operands[4];
     SpasmInstruction stripped = *instr;
     const SpasmOperand* rounding = NULL;
-    uint8_t rounding_index = 0;
 
     stripped.operands = operands;
     stripped.num_operands = 0;
@@ -1296,7 +1329,6 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
             }
 
             rounding = &instr->operands[i];
-            rounding_index = i;
         }
         else if(stripped.num_operands < 4)
         {
@@ -1316,7 +1348,7 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
         const bool is_evex = (form->flags & Spasm_x86_64_FormFlag_EVEX) != 0;
 
         if(is_evex != (pass == 1) ||
-           !spasm_x86_64_rounding_matches(form, rounding, rounding_index) ||
+           !spasm_x86_64_rounding_matches(form, rounding) ||
            !spasm_x86_64_form_matches(form, &stripped))
             continue;
 
@@ -1367,8 +1399,8 @@ bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out
         return false;
     }
 
-    for(uint32_t i = 0; i < enc.len; i++)
-        spasm_bytecode_push_back(out, enc.bytes[i]);
+    memcpy(out, enc.bytes, enc.len);
+    *out_size = enc.len;
 
     return true;
 }

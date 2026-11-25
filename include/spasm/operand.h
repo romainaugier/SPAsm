@@ -61,6 +61,7 @@ typedef struct
     union { struct {
         uint8_t mem_reg;
         uint8_t mem_index;
+        bool mem_disp32; /* Always encode the displacement on 32 bits (patched later, e.g. symbols) */
         int32_t mem_displacement;
         uint8_t mem_scale;
         uint8_t mem_size; /* In bytes, 0 when not specified. The element size when broadcast */
@@ -204,6 +205,12 @@ typedef struct
 
 #define SpasmOpSymbol(name) ((SpasmOperand){ \
     .type = SpasmOperandType_Symbol,       \
+    .symbol_name = (const char*)(name)})
+
+/* The address of a symbol plus offset (mov rax, table + 8) */
+#define SpasmOpSymbolOffset(name, offset) ((SpasmOperand){ \
+    .type = SpasmOperandType_Symbol,                     \
+    .imm_value = (int64_t)(offset),                      \
     .symbol_name = (const char*)(name)})
 
 #endif /* !defined(__SPASM_OPERAND) */

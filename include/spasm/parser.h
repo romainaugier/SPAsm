@@ -10,15 +10,17 @@
 #include "spasm/data.h"
 #include "spasm/instruction.h"
 
-typedef struct
-{
-    char* code;
-    size_t code_sz;
-    size_t at;
-} SpasmParser;
-
-SPASM_API bool spasm_parse(SpasmParser* parser,
+/*
+ * Parses Intel syntax assembly (see the README) into instructions (and labels) for the .text
+ * section and data blocks for the .rodata, .data and .bss sections. code does not need to be
+ * null-terminated and can be released after parsing. file_name is only used in error messages.
+ * Errors are printed on stderr (file:line:column: error: ...), parsing goes on with the next line
+ * to report them all. Returns false if there was any error
+ */
+SPASM_API bool spasm_parse(const char* code,
+                           size_t code_sz,
+                           const char* file_name,
                            SpasmData* data,
-                           SpasmInstructions* instrs);
+                           SpasmInstructions* instructions);
 
 #endif /* !defined(__SPASM_PARSER) */

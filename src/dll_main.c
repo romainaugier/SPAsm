@@ -14,25 +14,19 @@
 
 void SPASM_LIB_ENTRY lib_entry(void)
 {
-#if SPASM_DEBUG
-    printf("spasm entry\n");
-#endif /* SPASM_DEBUG */
 }
 
 void SPASM_LIB_EXIT lib_exit(void)
 {
-#if SPASM_DEBUG
-    printf("spasm exit\n");
-#endif /* SPASM_DEBUG */
 }
 
 #if defined(SPASM_WIN)
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) 
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
     (void)hModule;
     (void)lpReserved;
 
-    switch(ul_reason_for_call) 
+    switch(ul_reason_for_call)
     {
         case DLL_PROCESS_ATTACH:
             break;

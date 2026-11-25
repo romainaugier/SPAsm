@@ -3,6 +3,8 @@
 # All rights reserved.
 
 add_subdirectory(encoding)
+add_subdirectory(flat)
+add_subdirectory(parser)
 
 add_subdirectory(difftest)
 

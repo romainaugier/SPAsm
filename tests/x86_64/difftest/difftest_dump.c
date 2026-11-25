@@ -478,6 +478,7 @@ int main(void)
                                                 texts[text_order[i]]);
 
                 SpasmInstruction instr;
+                memset(&instr, 0, sizeof(SpasmInstruction));
                 instr.mnemonic = name;
                 instr.mnemonic_len = (uint8_t)strlen(name);
                 instr.operands = operands;
