@@ -29,7 +29,7 @@ jobs:
 
       - name: Build libromano
         run: |
-          cd ext/libromano/concurrentqueue
+          cd ext/libromano/ext/concurrentqueue
           ./build_c_api.sh
           cd ..
           ./build.sh --debug --install
