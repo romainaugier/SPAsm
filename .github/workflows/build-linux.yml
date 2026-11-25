@@ -1,0 +1,43 @@
+name: Build Linux
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gperf llvm
+          pip install --break-system-packages Opcodes==0.3.14
+
+      - name: Check the generated x86_64 tables are up to date
+        run: |
+          python3 x86_64/generate.py -o x86_64_instructions.c
+          python3 x86_64/generate.py --gperf-only
+          git diff --exit-code -- x86_64
+
+      - name: Build libromano
+        run: |
+          cd ext/libromano/concurrentqueue
+          ./build_c_api.sh
+          cd ..
+          ./build.sh --debug --install
+
+      - name: Build and test (debug, address sanitizer)
+        run: ./build.sh --tests --debug
+
+      - name: Differential test against llvm-mc
+        run: |
+          cd build
+          ctest -R x86_64_difftest --no-tests=error --output-on-failure

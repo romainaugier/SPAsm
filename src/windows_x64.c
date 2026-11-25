@@ -27,6 +27,7 @@ bool spasm_windows_x64_assembler(SpasmInstructions* instructions,
 
             sym_op->type = SpasmOperandType_Imm32;
             sym_op->imm_value = 0;
+            sym_op->imm_fixed = true;
         }
 
         if(!spasm_x86_64_encode_instruction(instr, bytecode))

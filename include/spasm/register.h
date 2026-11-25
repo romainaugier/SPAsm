@@ -15,15 +15,20 @@ typedef enum
 #if defined(SPASM_ENABLE_X86_64)
     SpasmRegister_x86_64_NONE,
 
+    /*
+        Each group of 16 follows the hardware register number (ModRM/SIB/REX), so the encoding
+        of a register is (reg - 1) % 16 for every group up to ZMM15
+    */
+
     /* 8-bit low */
     SpasmRegister_x86_64_AL,
-    SpasmRegister_x86_64_BL,
     SpasmRegister_x86_64_CL,
     SpasmRegister_x86_64_DL,
-    SpasmRegister_x86_64_SIL,
-    SpasmRegister_x86_64_DIL,
+    SpasmRegister_x86_64_BL,
     SpasmRegister_x86_64_SPL,
     SpasmRegister_x86_64_BPL,
+    SpasmRegister_x86_64_SIL,
+    SpasmRegister_x86_64_DIL,
     SpasmRegister_x86_64_R8B,
     SpasmRegister_x86_64_R9B,
     SpasmRegister_x86_64_R10B,
@@ -35,13 +40,13 @@ typedef enum
 
     /* 16-bit */
     SpasmRegister_x86_64_AX,
-    SpasmRegister_x86_64_BX,
     SpasmRegister_x86_64_CX,
     SpasmRegister_x86_64_DX,
-    SpasmRegister_x86_64_SI,
-    SpasmRegister_x86_64_DI,
+    SpasmRegister_x86_64_BX,
     SpasmRegister_x86_64_SP,
     SpasmRegister_x86_64_BP,
+    SpasmRegister_x86_64_SI,
+    SpasmRegister_x86_64_DI,
     SpasmRegister_x86_64_R8W,
     SpasmRegister_x86_64_R9W,
     SpasmRegister_x86_64_R10W,
@@ -53,13 +58,13 @@ typedef enum
 
     /* 32-bit */
     SpasmRegister_x86_64_EAX,
-    SpasmRegister_x86_64_EBX,
     SpasmRegister_x86_64_ECX,
     SpasmRegister_x86_64_EDX,
-    SpasmRegister_x86_64_ESI,
-    SpasmRegister_x86_64_EDI,
+    SpasmRegister_x86_64_EBX,
     SpasmRegister_x86_64_ESP,
     SpasmRegister_x86_64_EBP,
+    SpasmRegister_x86_64_ESI,
+    SpasmRegister_x86_64_EDI,
     SpasmRegister_x86_64_R8D,
     SpasmRegister_x86_64_R9D,
     SpasmRegister_x86_64_R10D,
@@ -201,7 +206,7 @@ typedef enum
     SpasmRegister_x86_64_T6,
     SpasmRegister_x86_64_T7,
 
-    SpasmRegister_x86_64_COUNT = SpasmRegister_x86_64_K7 - SpasmRegister_x86_64_NONE,
+    SpasmRegister_x86_64_COUNT,
 #endif /* defined(SPASM_ENABLE_X86_64) */
 
     /* AArch64 Registers */
@@ -318,6 +323,10 @@ typedef enum
 
 } SpasmRegister;
 
-SPASM_API SpasmRegister spasm_register_from_string(const char* s);
+/*
+ * Case-insensitive lookup of a register name (s does not need to be null-terminated).
+ * Returns SpasmRegister_Invalid if the name is not a register of an enabled backend
+ */
+SPASM_API SpasmRegister spasm_register_from_string(const char* s, size_t s_sz);
 
 #endif /* !defined(__SPASM_REGISTER) */

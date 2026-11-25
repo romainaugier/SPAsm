@@ -4,6 +4,10 @@
 
 add_subdirectory(encoding)
 
+if(NOT WIN32)
+    add_subdirectory(difftest)
+endif()
+
 if(SPASM_WINDOWS)
     add_subdirectory(windows)
 elseif(SPASM_LINUX)

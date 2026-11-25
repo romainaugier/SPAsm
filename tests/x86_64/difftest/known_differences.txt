@@ -1,0 +1,4 @@
+# Instructions where SPAsm and llvm-mc produce different but equivalent encodings.
+# One per line: <intel syntax as printed by difftest_dump> | <reason>
+
+xchg rax, rax | llvm-mc emits 90 (nop), SPAsm emits 48 90 (REX.W xchg rax, rax), both leave rax unchanged

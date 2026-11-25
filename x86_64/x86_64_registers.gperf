@@ -1,0 +1,203 @@
+%{
+/* SPDX-License-Identifier: BSD-3-Clause */
+/* Copyright (c) 2025 - Present Romain Augier */
+/* All rights reserved. */
+
+/*
+    gperf source of the x86_64 register lookup, regenerate x86_64_registers.c with:
+    python x86_64/generate.py --gperf-only
+*/
+
+#include "spasm/register.h"
+
+#include <string.h>
+%}
+%language=ANSI-C
+%struct-type
+%readonly-tables
+%global-table
+%pic
+%ignore-case
+%compare-strncmp
+%define hash-function-name spasm_x86_64_register_hash
+%define lookup-function-name spasm_x86_64_register_lookup
+%define string-pool-name spasm_x86_64_register_strings
+%define word-array-name spasm_x86_64_register_words
+%define constants-prefix SPASM_X86_64_REGISTER_
+struct Spasm_x86_64_RegisterKeyword { int name; uint8_t reg; };
+%%
+rax, SpasmRegister_x86_64_RAX
+rcx, SpasmRegister_x86_64_RCX
+rdx, SpasmRegister_x86_64_RDX
+rbx, SpasmRegister_x86_64_RBX
+rsp, SpasmRegister_x86_64_RSP
+rbp, SpasmRegister_x86_64_RBP
+rsi, SpasmRegister_x86_64_RSI
+rdi, SpasmRegister_x86_64_RDI
+r8, SpasmRegister_x86_64_R8
+r9, SpasmRegister_x86_64_R9
+r10, SpasmRegister_x86_64_R10
+r11, SpasmRegister_x86_64_R11
+r12, SpasmRegister_x86_64_R12
+r13, SpasmRegister_x86_64_R13
+r14, SpasmRegister_x86_64_R14
+r15, SpasmRegister_x86_64_R15
+eax, SpasmRegister_x86_64_EAX
+ecx, SpasmRegister_x86_64_ECX
+edx, SpasmRegister_x86_64_EDX
+ebx, SpasmRegister_x86_64_EBX
+esp, SpasmRegister_x86_64_ESP
+ebp, SpasmRegister_x86_64_EBP
+esi, SpasmRegister_x86_64_ESI
+edi, SpasmRegister_x86_64_EDI
+r8d, SpasmRegister_x86_64_R8D
+r9d, SpasmRegister_x86_64_R9D
+r10d, SpasmRegister_x86_64_R10D
+r11d, SpasmRegister_x86_64_R11D
+r12d, SpasmRegister_x86_64_R12D
+r13d, SpasmRegister_x86_64_R13D
+r14d, SpasmRegister_x86_64_R14D
+r15d, SpasmRegister_x86_64_R15D
+ax, SpasmRegister_x86_64_AX
+cx, SpasmRegister_x86_64_CX
+dx, SpasmRegister_x86_64_DX
+bx, SpasmRegister_x86_64_BX
+sp, SpasmRegister_x86_64_SP
+bp, SpasmRegister_x86_64_BP
+si, SpasmRegister_x86_64_SI
+di, SpasmRegister_x86_64_DI
+r8w, SpasmRegister_x86_64_R8W
+r9w, SpasmRegister_x86_64_R9W
+r10w, SpasmRegister_x86_64_R10W
+r11w, SpasmRegister_x86_64_R11W
+r12w, SpasmRegister_x86_64_R12W
+r13w, SpasmRegister_x86_64_R13W
+r14w, SpasmRegister_x86_64_R14W
+r15w, SpasmRegister_x86_64_R15W
+al, SpasmRegister_x86_64_AL
+cl, SpasmRegister_x86_64_CL
+dl, SpasmRegister_x86_64_DL
+bl, SpasmRegister_x86_64_BL
+spl, SpasmRegister_x86_64_SPL
+bpl, SpasmRegister_x86_64_BPL
+sil, SpasmRegister_x86_64_SIL
+dil, SpasmRegister_x86_64_DIL
+r8b, SpasmRegister_x86_64_R8B
+r9b, SpasmRegister_x86_64_R9B
+r10b, SpasmRegister_x86_64_R10B
+r11b, SpasmRegister_x86_64_R11B
+r12b, SpasmRegister_x86_64_R12B
+r13b, SpasmRegister_x86_64_R13B
+r14b, SpasmRegister_x86_64_R14B
+r15b, SpasmRegister_x86_64_R15B
+r8l, SpasmRegister_x86_64_R8B
+r9l, SpasmRegister_x86_64_R9B
+r10l, SpasmRegister_x86_64_R10B
+r11l, SpasmRegister_x86_64_R11B
+r12l, SpasmRegister_x86_64_R12B
+r13l, SpasmRegister_x86_64_R13B
+r14l, SpasmRegister_x86_64_R14B
+r15l, SpasmRegister_x86_64_R15B
+xmm0, SpasmRegister_x86_64_XMM0
+xmm1, SpasmRegister_x86_64_XMM1
+xmm2, SpasmRegister_x86_64_XMM2
+xmm3, SpasmRegister_x86_64_XMM3
+xmm4, SpasmRegister_x86_64_XMM4
+xmm5, SpasmRegister_x86_64_XMM5
+xmm6, SpasmRegister_x86_64_XMM6
+xmm7, SpasmRegister_x86_64_XMM7
+xmm8, SpasmRegister_x86_64_XMM8
+xmm9, SpasmRegister_x86_64_XMM9
+xmm10, SpasmRegister_x86_64_XMM10
+xmm11, SpasmRegister_x86_64_XMM11
+xmm12, SpasmRegister_x86_64_XMM12
+xmm13, SpasmRegister_x86_64_XMM13
+xmm14, SpasmRegister_x86_64_XMM14
+xmm15, SpasmRegister_x86_64_XMM15
+ymm0, SpasmRegister_x86_64_YMM0
+ymm1, SpasmRegister_x86_64_YMM1
+ymm2, SpasmRegister_x86_64_YMM2
+ymm3, SpasmRegister_x86_64_YMM3
+ymm4, SpasmRegister_x86_64_YMM4
+ymm5, SpasmRegister_x86_64_YMM5
+ymm6, SpasmRegister_x86_64_YMM6
+ymm7, SpasmRegister_x86_64_YMM7
+ymm8, SpasmRegister_x86_64_YMM8
+ymm9, SpasmRegister_x86_64_YMM9
+ymm10, SpasmRegister_x86_64_YMM10
+ymm11, SpasmRegister_x86_64_YMM11
+ymm12, SpasmRegister_x86_64_YMM12
+ymm13, SpasmRegister_x86_64_YMM13
+ymm14, SpasmRegister_x86_64_YMM14
+ymm15, SpasmRegister_x86_64_YMM15
+zmm0, SpasmRegister_x86_64_ZMM0
+zmm1, SpasmRegister_x86_64_ZMM1
+zmm2, SpasmRegister_x86_64_ZMM2
+zmm3, SpasmRegister_x86_64_ZMM3
+zmm4, SpasmRegister_x86_64_ZMM4
+zmm5, SpasmRegister_x86_64_ZMM5
+zmm6, SpasmRegister_x86_64_ZMM6
+zmm7, SpasmRegister_x86_64_ZMM7
+zmm8, SpasmRegister_x86_64_ZMM8
+zmm9, SpasmRegister_x86_64_ZMM9
+zmm10, SpasmRegister_x86_64_ZMM10
+zmm11, SpasmRegister_x86_64_ZMM11
+zmm12, SpasmRegister_x86_64_ZMM12
+zmm13, SpasmRegister_x86_64_ZMM13
+zmm14, SpasmRegister_x86_64_ZMM14
+zmm15, SpasmRegister_x86_64_ZMM15
+k0, SpasmRegister_x86_64_K0
+k1, SpasmRegister_x86_64_K1
+k2, SpasmRegister_x86_64_K2
+k3, SpasmRegister_x86_64_K3
+k4, SpasmRegister_x86_64_K4
+k5, SpasmRegister_x86_64_K5
+k6, SpasmRegister_x86_64_K6
+k7, SpasmRegister_x86_64_K7
+rip, SpasmRegister_x86_64_RIP
+cs, SpasmRegister_x86_64_CS
+ds, SpasmRegister_x86_64_DS
+ss, SpasmRegister_x86_64_SS
+es, SpasmRegister_x86_64_ES
+fs, SpasmRegister_x86_64_FS
+gs, SpasmRegister_x86_64_GS
+rflags, SpasmRegister_x86_64_RFlags
+cr0, SpasmRegister_x86_64_CR0
+cr1, SpasmRegister_x86_64_CR1
+cr2, SpasmRegister_x86_64_CR2
+cr3, SpasmRegister_x86_64_CR3
+cr4, SpasmRegister_x86_64_CR4
+cr5, SpasmRegister_x86_64_CR5
+cr6, SpasmRegister_x86_64_CR6
+cr7, SpasmRegister_x86_64_CR7
+cr8, SpasmRegister_x86_64_CR8
+cr9, SpasmRegister_x86_64_CR9
+cr10, SpasmRegister_x86_64_CR10
+cr11, SpasmRegister_x86_64_CR11
+cr12, SpasmRegister_x86_64_CR12
+cr13, SpasmRegister_x86_64_CR13
+cr14, SpasmRegister_x86_64_CR14
+cr15, SpasmRegister_x86_64_CR15
+dr0, SpasmRegister_x86_64_DR0
+dr1, SpasmRegister_x86_64_DR1
+dr2, SpasmRegister_x86_64_DR2
+dr3, SpasmRegister_x86_64_DR3
+dr4, SpasmRegister_x86_64_DR4
+dr5, SpasmRegister_x86_64_DR5
+dr6, SpasmRegister_x86_64_DR6
+dr7, SpasmRegister_x86_64_DR7
+tr0, SpasmRegister_x86_64_T0
+tr1, SpasmRegister_x86_64_T1
+tr2, SpasmRegister_x86_64_T2
+tr3, SpasmRegister_x86_64_T3
+tr4, SpasmRegister_x86_64_T4
+tr5, SpasmRegister_x86_64_T5
+tr6, SpasmRegister_x86_64_T6
+tr7, SpasmRegister_x86_64_T7
+%%
+SpasmRegister spasm_x86_64_register_from_string(const char* s, size_t s_sz)
+{
+    const struct Spasm_x86_64_RegisterKeyword* keyword = spasm_x86_64_register_lookup(s, s_sz);
+
+    return keyword != NULL ? (SpasmRegister)keyword->reg : SpasmRegister_Invalid;
+}

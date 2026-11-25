@@ -20,10 +20,6 @@
 
 #if defined(SPASM_ENABLE_X86_64)
 
-/* Generated table */
-extern const Spasm_x86_64_InstructionInfo spasm_x86_64_instruction_table[];
-extern const size_t spasm_x86_64_instruction_table_size;
-
 /* Debug funcs */
 
 const char* spasm_x86_64_get_register_as_string(SpasmRegister reg)
@@ -169,40 +165,47 @@ size_t spasm_x86_64_operand_debug(SpasmOperand* operand, char* fmt_buf, size_t m
                                     "%s",
                                     spasm_x86_64_get_register_as_string(operand->reg));
         case SpasmOperandType_Mem:
-            if(operand->mem_index == 0)
+        {
+            static const char* size_prefixes[] = { "", "byte ptr ", "word ptr ", "", "dword ptr ", "", "", "",
+                                                   "qword ptr ", "", "", "", "", "", "", "", "xmmword ptr " };
+
+            const char* size_prefix = operand->mem_size < 17 ? size_prefixes[operand->mem_size] :
+                                      operand->mem_size == 32 ? "ymmword ptr " : "";
+
+            size_t sz = (size_t)snprintf(fmt_buf, max_fmt_sz, "%s[", size_prefix);
+            const char* separator = "";
+
+            if(operand->mem_reg != SpasmRegister_x86_64_NONE)
             {
-                if(operand->mem_displacement == 0)
-                    return (size_t)snprintf(fmt_buf,
-                                            max_fmt_sz,
-                                            "[%s]",
-                                            spasm_x86_64_get_register_as_string(operand->mem_reg));
-
-
-                return (size_t)snprintf(fmt_buf,
-                                        max_fmt_sz,
-                                        "[%s + %d]",
-                                        spasm_x86_64_get_register_as_string(operand->mem_reg),
-                                        operand->mem_displacement);
+                sz += (size_t)snprintf(fmt_buf + sz,
+                                       max_fmt_sz - sz,
+                                       "%s",
+                                       spasm_x86_64_get_register_as_string(operand->mem_reg));
+                separator = " + ";
             }
-            else
+
+            if(operand->mem_index != SpasmRegister_x86_64_NONE)
             {
-                if(operand->mem_displacement == 0)
-                    return (size_t)snprintf(fmt_buf,
-                                            max_fmt_sz,
-                                            "[%s + %s * %d]",
-                                            spasm_x86_64_get_register_as_string(operand->mem_reg),
-                                            spasm_x86_64_get_register_as_string(operand->mem_index),
-                                            (int32_t)operand->mem_scale);
-
-
-                return (size_t)snprintf(fmt_buf,
-                                        max_fmt_sz,
-                                        "[%s + %s * %d + %d]",
-                                        spasm_x86_64_get_register_as_string(operand->mem_reg),
-                                        spasm_x86_64_get_register_as_string(operand->mem_index),
-                                        (int32_t)operand->mem_scale,
-                                        operand->mem_displacement);
+                sz += (size_t)snprintf(fmt_buf + sz,
+                                       max_fmt_sz - sz,
+                                       "%s%s * %u",
+                                       separator,
+                                       spasm_x86_64_get_register_as_string(operand->mem_index),
+                                       (uint32_t)(operand->mem_scale == 0 ? 1 : operand->mem_scale));
+                separator = " + ";
             }
+
+            if(operand->mem_displacement != 0 || separator[0] == '\0')
+                sz += (size_t)snprintf(fmt_buf + sz,
+                                       max_fmt_sz - sz,
+                                       "%s%d",
+                                       separator,
+                                       operand->mem_displacement);
+
+            sz += (size_t)snprintf(fmt_buf + sz, max_fmt_sz - sz, "]");
+
+            return sz;
+        }
         case SpasmOperandType_Imm8:
         case SpasmOperandType_Imm16:
         case SpasmOperandType_Imm32:
@@ -300,563 +303,597 @@ void spasm_x86_64_instructions_debug(SpasmInstructions* instructions, int32_t fd
 
 */
 
-SPASM_FORCE_INLINE SpasmByte spasm_x86_64_get_register_code(SpasmRegister reg)
+#define SPASM_X86_64_MAX_INSTRUCTION_SIZE 15
+
+typedef struct
 {
-    return (reg - 1) % 16;
+    SpasmByte bytes[SPASM_X86_64_MAX_INSTRUCTION_SIZE];
+    uint32_t len;
+} Spasm_x86_64_Encoding;
+
+static SPASM_FORCE_INLINE void spasm_x86_64_emit(Spasm_x86_64_Encoding* enc, SpasmByte byte)
+{
+    enc->bytes[enc->len++] = byte;
 }
 
-typedef enum
+static SPASM_FORCE_INLINE void spasm_x86_64_emit_le(Spasm_x86_64_Encoding* enc, int64_t value, uint32_t size)
 {
-    Spasm_x86_64_RegisterWidth_Invalid,
-    Spasm_x86_64_RegisterWidth_8,
-    Spasm_x86_64_RegisterWidth_16,
-    Spasm_x86_64_RegisterWidth_32,
-    Spasm_x86_64_RegisterWidth_64,
-    Spasm_x86_64_RegisterWidth_128,
-    Spasm_x86_64_RegisterWidth_256,
-    Spasm_x86_64_RegisterWidth_512,
-    Spasm_x86_64_RegisterWidth_OpMask,
-} Spasm_x86_64_RegisterWidth;
-
-SPASM_FORCE_INLINE Spasm_x86_64_RegisterWidth spasm_x86_64_get_register_width(SpasmRegister reg)
-{
-    return (reg - 1) / 16 + 1;
+    for(uint32_t i = 0; i < size; i++)
+        enc->bytes[enc->len++] = (SpasmByte)(((uint64_t)value >> (i * 8)) & 0xFF);
 }
 
-SPASM_FORCE_INLINE size_t spasm_x86_64_get_register_size(SpasmRegister reg)
+static SPASM_FORCE_INLINE SpasmByte spasm_x86_64_get_register_code(SpasmRegister reg)
 {
-    return 8 << ((reg - 1) / 16);
+    return (SpasmByte)((reg - 1) % 16);
 }
 
-size_t spasm_x86_64_get_operand_size(SpasmOperand* operand, size_t default_value)
+static SPASM_FORCE_INLINE Spasm_x86_64_OperandKind spasm_x86_64_get_register_kind(SpasmRegister reg)
 {
-    switch(operand->type)
+    if(reg < SpasmRegister_x86_64_AL || reg > SpasmRegister_x86_64_YMM15)
+        return Spasm_x86_64_OperandKind_NONE;
+
+    return (Spasm_x86_64_OperandKind)(Spasm_x86_64_OperandKind_R8 + (reg - SpasmRegister_x86_64_AL) / 16);
+}
+
+/* SPL, BPL, SIL and DIL need a REX prefix (without it, codes 4-7 are AH, CH, DH, BH) */
+static SPASM_FORCE_INLINE bool spasm_x86_64_is_uniform_byte_register(SpasmRegister reg)
+{
+    return reg >= SpasmRegister_x86_64_SPL && reg <= SpasmRegister_x86_64_DIL;
+}
+
+
+static SPASM_FORCE_INLINE bool spasm_x86_64_has_vector_index(const SpasmOperand* mem)
+{
+    const Spasm_x86_64_OperandKind index_kind = spasm_x86_64_get_register_kind(mem->mem_index);
+
+    return index_kind == Spasm_x86_64_OperandKind_XMM || index_kind == Spasm_x86_64_OperandKind_YMM;
+}
+
+/* Size in bytes of a sized memory kind, 0 for unsized/vsib memory and non-memory kinds */
+static uint8_t spasm_x86_64_get_memory_size(Spasm_x86_64_OperandKind kind)
+{
+    switch(kind)
     {
-        case SpasmOperandType_Register:
-            return spasm_x86_64_get_register_size(operand->reg);
-        case SpasmOperandType_Mem:
-            return default_value;
-        case SpasmOperandType_Imm8:
+        case Spasm_x86_64_OperandKind_M8: return 1;
+        case Spasm_x86_64_OperandKind_M16: return 2;
+        case Spasm_x86_64_OperandKind_M32: return 4;
+        case Spasm_x86_64_OperandKind_M64: return 8;
+        case Spasm_x86_64_OperandKind_M128: return 16;
+        case Spasm_x86_64_OperandKind_M256: return 32;
+        default: return 0;
+    }
+}
+
+static SPASM_FORCE_INLINE bool spasm_x86_64_is_immediate(const SpasmOperand* operand)
+{
+    return operand->type >= SpasmOperandType_Imm8 && operand->type <= SpasmOperandType_Imm64;
+}
+
+/*
+    Immediates are matched by value, the operand type (Imm8...Imm64) is not a constraint, so the
+    encoder can pick the shortest form. A sign-extended immediate (add r64, imm8) must fit the signed
+    range, otherwise both the signed and unsigned ranges of the immediate width are accepted
+*/
+static bool spasm_x86_64_immediate_fits(int64_t value, Spasm_x86_64_OperandKind kind, bool sign_extended)
+{
+    switch(kind)
+    {
+        case Spasm_x86_64_OperandKind_IMM8:
+            return value >= INT8_MIN && value <= (sign_extended ? INT8_MAX : UINT8_MAX);
+        case Spasm_x86_64_OperandKind_IMM16:
+            return value >= INT16_MIN && value <= (sign_extended ? INT16_MAX : UINT16_MAX);
+        case Spasm_x86_64_OperandKind_IMM32:
+            return value >= INT32_MIN && value <= (sign_extended ? INT32_MAX : (int64_t)UINT32_MAX);
+        case Spasm_x86_64_OperandKind_IMM64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool spasm_x86_64_operand_matches(const SpasmOperand* operand,
+                                         Spasm_x86_64_OperandKind kind,
+                                         bool sign_extended_imm)
+{
+    switch(kind)
+    {
+        case Spasm_x86_64_OperandKind_R8:
+        case Spasm_x86_64_OperandKind_R16:
+        case Spasm_x86_64_OperandKind_R32:
+        case Spasm_x86_64_OperandKind_R64:
+        case Spasm_x86_64_OperandKind_XMM:
+        case Spasm_x86_64_OperandKind_YMM:
+            return operand->type == SpasmOperandType_Register &&
+                   spasm_x86_64_get_register_kind(operand->reg) == kind;
+
+        case Spasm_x86_64_OperandKind_AL:
+            return operand->type == SpasmOperandType_Register && operand->reg == SpasmRegister_x86_64_AL;
+        case Spasm_x86_64_OperandKind_AX:
+            return operand->type == SpasmOperandType_Register && operand->reg == SpasmRegister_x86_64_AX;
+        case Spasm_x86_64_OperandKind_EAX:
+            return operand->type == SpasmOperandType_Register && operand->reg == SpasmRegister_x86_64_EAX;
+        case Spasm_x86_64_OperandKind_RAX:
+            return operand->type == SpasmOperandType_Register && operand->reg == SpasmRegister_x86_64_RAX;
+        case Spasm_x86_64_OperandKind_CL:
+            return operand->type == SpasmOperandType_Register && operand->reg == SpasmRegister_x86_64_CL;
+        case Spasm_x86_64_OperandKind_XMM0:
+            return operand->type == SpasmOperandType_Register && operand->reg == SpasmRegister_x86_64_XMM0;
+
+        case Spasm_x86_64_OperandKind_M:
+            return operand->type == SpasmOperandType_Mem && !spasm_x86_64_has_vector_index(operand);
+
+        case Spasm_x86_64_OperandKind_M8:
+        case Spasm_x86_64_OperandKind_M16:
+        case Spasm_x86_64_OperandKind_M32:
+        case Spasm_x86_64_OperandKind_M64:
+        case Spasm_x86_64_OperandKind_M128:
+        case Spasm_x86_64_OperandKind_M256:
+            return operand->type == SpasmOperandType_Mem &&
+                   !spasm_x86_64_has_vector_index(operand) &&
+                   (operand->mem_size == 0 || operand->mem_size == spasm_x86_64_get_memory_size(kind));
+
+        case Spasm_x86_64_OperandKind_VM32X:
+        case Spasm_x86_64_OperandKind_VM64X:
+            return operand->type == SpasmOperandType_Mem &&
+                   spasm_x86_64_get_register_kind(operand->mem_index) == Spasm_x86_64_OperandKind_XMM;
+        case Spasm_x86_64_OperandKind_VM32Y:
+        case Spasm_x86_64_OperandKind_VM64Y:
+            return operand->type == SpasmOperandType_Mem &&
+                   spasm_x86_64_get_register_kind(operand->mem_index) == Spasm_x86_64_OperandKind_YMM;
+
+        case Spasm_x86_64_OperandKind_IMM8:
+        case Spasm_x86_64_OperandKind_IMM16:
+        case Spasm_x86_64_OperandKind_IMM32:
+        case Spasm_x86_64_OperandKind_IMM64:
+            if(!spasm_x86_64_is_immediate(operand))
+                return false;
+
+            if(operand->imm_fixed &&
+               (int)(kind - Spasm_x86_64_OperandKind_IMM8) != (int)(operand->type - SpasmOperandType_Imm8))
+                return false;
+
+            return spasm_x86_64_immediate_fits(operand->imm_value, kind, sign_extended_imm);
+
+        /* The displacement depends on the instruction size, so the width is the one requested */
+        case Spasm_x86_64_OperandKind_REL8:
+            return operand->type == SpasmOperandType_Imm8;
+        case Spasm_x86_64_OperandKind_REL32:
+            return operand->type == SpasmOperandType_Imm32;
+
+        case Spasm_x86_64_OperandKind_ONE:
+            return spasm_x86_64_is_immediate(operand) && operand->imm_value == 1;
+        case Spasm_x86_64_OperandKind_THREE:
+            return spasm_x86_64_is_immediate(operand) && operand->imm_value == 3;
+
+        default:
+            return false;
+    }
+}
+
+static uint8_t spasm_x86_64_get_form_memory_size(const Spasm_x86_64_Form* form)
+{
+    for(uint8_t i = 0; i < 4; i++)
+    {
+        const uint8_t size = spasm_x86_64_get_memory_size((Spasm_x86_64_OperandKind)form->operands[i]);
+
+        if(size != 0)
+            return size;
+    }
+
+    return 0;
+}
+
+static bool spasm_x86_64_form_matches(const Spasm_x86_64_Form* form, const SpasmInstruction* instr)
+{
+    if(instr->num_operands > 4)
+        return false;
+
+    /* 90 is nop: xchg eax, eax must zero the upper half of rax, so it needs 87 /r */
+    if(form->opcode_len == 1 &&
+       form->opcode[0] == 0x90 &&
+       instr->num_operands == 2 &&
+       instr->operands[0].type == SpasmOperandType_Register &&
+       instr->operands[1].type == SpasmOperandType_Register &&
+       instr->operands[0].reg == SpasmRegister_x86_64_EAX &&
+       instr->operands[1].reg == SpasmRegister_x86_64_EAX)
+        return false;
+
+    for(uint8_t i = 0; i < 4; i++)
+    {
+        if(i >= instr->num_operands)
+            return form->operands[i] == Spasm_x86_64_OperandKind_NONE;
+
+        if(!spasm_x86_64_operand_matches(&instr->operands[i],
+                                         (Spasm_x86_64_OperandKind)form->operands[i],
+                                         (form->flags & Spasm_x86_64_FormFlag_IMMSEXT) != 0))
+            return false;
+    }
+
+    return true;
+}
+
+static uint32_t spasm_x86_64_get_immediate_size(Spasm_x86_64_OperandKind kind)
+{
+    switch(kind)
+    {
+        case Spasm_x86_64_OperandKind_IMM8:
+        case Spasm_x86_64_OperandKind_REL8:
+            return 1;
+        case Spasm_x86_64_OperandKind_IMM16:
+            return 2;
+        case Spasm_x86_64_OperandKind_IMM32:
+        case Spasm_x86_64_OperandKind_REL32:
+            return 4;
+        case Spasm_x86_64_OperandKind_IMM64:
             return 8;
-        case SpasmOperandType_Imm16:
-            return 16;
-        case SpasmOperandType_Imm32:
-            return 32;
-        case SpasmOperandType_Imm64:
-            return 64;
         default:
             return 0;
     }
 }
 
-bool spasm_x86_64_needs_rex(SpasmInstruction* instr)
-{
-    bool needs_rex = false;
-
-    for(int i = 0; i < instr->num_operands; i++)
-    {
-        needs_rex = instr->operands[i].type == SpasmOperandType_Register &&
-                    spasm_x86_64_get_register_code(instr->operands[i].reg) > 7;
-    }
-
-    return needs_rex;
-}
-
-typedef struct
-{
-    SpasmByte bytes[4];
-    uint32_t len;
-} Spasm_x86_64_PrefixBytes;
-
-typedef struct
-{
-    bool needs_rex;
-    bool needs_vex2;
-    bool needs_vex3;
-    bool needs_evex;
-    uint8_t pp;
-    uint8_t mmmmm;
-    uint8_t vector_len; /* 0=128-bit, 1=256-bit, 2=512-bit */
-    uint8_t vvvv;
-    uint8_t aaa;
-    bool z;
-} Spasm_x86_64_PrefixInfo;
-
-Spasm_x86_64_PrefixBytes spasm_encode_x86_64_prefix(Spasm_x86_64_PrefixInfo info,
-                                                    const Spasm_x86_64_InstructionInfo* instr_info,
-                                                    SpasmOperand* operands,
-                                                    uint8_t num_operands)
-{
-    Spasm_x86_64_PrefixBytes result;
-    memset(&result, 0, sizeof(Spasm_x86_64_PrefixBytes));
-
-    if(info.needs_evex)
-    {
-        SpasmByte R = 0, X = 0, B = 0, R_prime = 0, W = 0, V_prime = 0, b = 0;
-        SpasmByte L_prime_L = info.vector_len;
-        SpasmByte mm = info.mmmmm;
-        SpasmByte pp = info.pp;
-
-        for(uint8_t i = 0; i < num_operands; i++)
-        {
-            if(operands[i].type == SpasmOperandType_Register)
-            {
-                SpasmByte code = spasm_x86_64_get_register_code(operands[i].reg);
-
-                if(code > 7)
-                {
-                    if(i == 0)
-                        R = 1;
-                    else if(i == 1)
-                        info.vvvv = code & 0xF;
-                    else if(i == 2)
-                        B = 1;
-                }
-
-                if(spasm_x86_64_get_register_size(operands[i].reg) == Spasm_x86_64_RegisterWidth_OpMask)
-                {
-                    /* TODO: add zeroing support */
-                    info.aaa = code & 0x7;
-                    info.z = false;
-                }
-
-                if(spasm_x86_64_get_register_width(operands[i].reg) == Spasm_x86_64_RegisterWidth_64)
-                    W = 1;
-            }
-            if(operands[i].type == SpasmOperandType_Mem)
-            {
-                SpasmByte code = spasm_x86_64_get_register_code(operands[i].mem_reg);
-
-                if(code > 7)
-                    B = 1;
-
-                if(operands[i].mem_index != SpasmRegister_x86_64_NONE)
-                {
-                    code = spasm_x86_64_get_register_code(operands[i].mem_index);
-
-                    if(code > 7)
-                        X = 1;
-                }
-            }
-        }
-
-        result.bytes[0] = 0x62;
-        result.bytes[1] = (R << 7) | (X << 6) | (B << 5) | (R_prime << 4) | mm;
-        result.bytes[2] = (W << 7) | (info.vvvv << 3) | (1 << 2) | pp;
-        result.bytes[3] = (info.z << 7) | (L_prime_L << 5) | (b << 4) | (V_prime << 3) | info.aaa;
-        result.len = 4;
-    }
-    else if(info.needs_vex2 || info.needs_vex3)
-    {
-        SpasmByte R = 0, X = 0, B = 0, W = 0, vvvv = 0;
-        SpasmByte L = info.vector_len & 0x1;
-        SpasmByte pp = info.pp;
-        SpasmByte mmmmm = info.mmmmm;
-
-        for(uint8_t i = 0; i < num_operands; i++)
-        {
-            if(operands[i].type == SpasmOperandType_Register)
-            {
-                SpasmByte code = spasm_x86_64_get_register_code(operands[i].reg);
-
-                if(code > 7)
-                {
-                    if(i == 0)
-                        R = 1;
-
-                    else if(i == 1)
-                        vvvv = code & 0xF;
-
-                    else if(i == 2)
-                        B = 1;
-                }
-
-                if(spasm_x86_64_get_register_width(operands[i].reg) == Spasm_x86_64_RegisterWidth_64)
-                    W = 1;
-            }
-
-            if(operands[i].type == SpasmOperandType_Mem)
-            {
-                SpasmByte code = spasm_x86_64_get_register_code(operands[i].mem_reg);
-
-                if(code > 7)
-                    B = 1;
-
-                if(operands[i].mem_index != SpasmRegister_x86_64_NONE)
-                {
-                    code = spasm_x86_64_get_register_code(operands[i].mem_index);
-
-                    if(code > 7)
-                        X = 1;
-                }
-            }
-        }
-
-        if(info.needs_vex3 || X || B || mmmmm != 0x01 || W)
-        {
-            result.bytes[0] = 0xC4;
-            result.bytes[1] = (R << 7) | (X << 6) | (B << 5) | mmmmm;
-            result.bytes[2] = (W << 7) | (vvvv << 3) | (L << 2) | pp;
-            result.len = 3;
-        }
-        else
-        {
-            result.bytes[0] = 0xC5;
-            result.bytes[1] = (R << 7) | (vvvv << 3) | (L << 2) | pp;
-            result.len = 2;
-        }
-    }
-    else if(info.needs_rex)
-    {
-        SpasmByte W = 0, R = 0, X = 0, B = 0;
-
-        for(uint8_t i = 0; i < num_operands; i++)
-        {
-            if(operands[i].type == SpasmOperandType_Register)
-            {
-                SpasmByte code = spasm_x86_64_get_register_code(operands[i].reg);
-
-                if(instr_info->force_rex_w)
-                    W = 1;
-
-                if(code > 7)
-                {
-                    if(instr_info->reg_in_opcode)
-                    {
-                        B = 1;
-                        result.bytes[0] += code & 7;
-                    }
-
-                    if(instr_info->reg_in_modrm_reg && i  == instr_info->modrm_reg_operand)
-                        R = 1;
-
-                    if(instr_info->reg_in_modrm_rm && i == instr_info->modrm_rm_operand)
-                        B = 1;
-                }
-
-                if(spasm_x86_64_get_register_width(operands[i].reg) == Spasm_x86_64_RegisterWidth_64)
-                    W = 1;
-            }
-
-            if(operands[i].type == SpasmOperandType_Mem)
-            {
-                SpasmByte code = spasm_x86_64_get_register_code(operands[i].mem_reg);
-
-                if(code > 7)
-                    B = 1;
-
-                if(operands[i].mem_index != SpasmRegister_x86_64_NONE)
-                {
-                    code = spasm_x86_64_get_register_code(operands[i].mem_index);
-
-                    if(code > 7)
-                        X = 1;
-                }
-            }
-        }
-
-        result.bytes[0] = 0x40 | (W << 3) | (R << 2) | (X << 1) | B;
-        result.len = (W || R || X || B) ? 1 : 0; /* Omit REX if not needed */
-    }
-
-    return result;
-}
-
 /*
-    The ModRMSibOffset struct holds the encoded ModR/M byte, optional SIB byte,
-    and displacement (8-bit or 32-bit) for memory operands
+    Encodes the ModR/M byte of a memory operand, with the optional SIB byte and displacement.
+    reg_field is the 3-bit ModR/M.reg (register number or /digit).
 
-    modrm: encodes addressing mode (mod), destination register (reg),
-           and source register or memory (rm)
-    sib: encodes scale, index and base for complex memory addressing
-
-    The ModR/M and SIB bytes are needed if the instruction has two operands (destination and source)
-    It handles:
-     Register-to-register instructions (mov rax, rbx).
-     Register-to-memory or memory-to-register instructions (mov rax, [rbx], mov [rax], rbx).
-     Memory addressing with SIB (mov rax, [rbx + rcx * 4 + 16]).
-     Extended registers (R8, XMM8) for REX/VEX/EVEX prefixes.
+    Special cases of the 64-bit ModR/M encoding:
+     - rm=100 means a SIB byte follows: rsp/r12 as base always need a SIB
+     - mod=00 rm=101 means [rip + disp32]: rbp/r13 as base need mod=01 with a zero disp8
+     - SIB base=101 with mod=00 means no base + disp32: used for [disp32] and [index * scale + disp32]
 */
-
-typedef struct
+static bool spasm_x86_64_encode_memory(const SpasmOperand* mem,
+                                       SpasmByte reg_field,
+                                       Spasm_x86_64_Encoding* enc)
 {
-    SpasmByte modrm;
-    SpasmByte sib;
-    bool has_sib;
-    bool has_disp8;
-    bool has_disp32;
-    SpasmByte disp8;
-    int32_t disp32;
-} Spasm_x86_64_ModRMSibOffset;
+    const SpasmRegister base = mem->mem_reg;
+    const SpasmRegister index = mem->mem_index;
+    const int32_t disp = mem->mem_displacement;
 
-SpasmByte spasm_x86_64_get_rm(SpasmRegister reg)
-{
-    SpasmByte code = spasm_x86_64_get_register_code(reg);
-    return code & 0x7;
-}
+    SpasmByte scale_bits;
 
-Spasm_x86_64_ModRMSibOffset spasm_x86_64_operands_as_modrm_sib_offset(SpasmOperand* dst,
-                                                                      SpasmOperand* src,
-                                                                      Spasm_x86_64_PrefixInfo* prefix_info,
-                                                                      const Spasm_x86_64_InstructionInfo* instr_info)
-{
-    Spasm_x86_64_ModRMSibOffset result = { 0 };
-
-    if(dst->type == SpasmOperandType_Register && src->type == SpasmOperandType_Register)
+    switch(mem->mem_scale)
     {
-        /* mod=11 (register-direct) */
-
-        if(instr_info->operand_sizes[0] > 64)
-            result.modrm = (0x3 << 6) |
-                           (spasm_x86_64_get_rm(dst->reg) << 3) |
-                           spasm_x86_64_get_rm(src->reg);
-        else
-            result.modrm = (0x3 << 6) |
-                           (spasm_x86_64_get_rm(src->reg) << 3) |
-                           spasm_x86_64_get_rm(dst->reg);
-
-        return result;
+        case 0:
+        case 1: scale_bits = 0; break;
+        case 2: scale_bits = 1; break;
+        case 4: scale_bits = 2; break;
+        case 8: scale_bits = 3; break;
+        default:
+            spasm_error("Invalid memory operand scale: %u (must be 1, 2, 4 or 8)", (uint32_t)mem->mem_scale);
+            return false;
     }
 
-    if(dst->type == SpasmOperandType_Register && src->type >= SpasmOperandType_Imm8)
+    const Spasm_x86_64_OperandKind index_kind = spasm_x86_64_get_register_kind(index);
+
+    if(index != SpasmRegister_x86_64_NONE &&
+       index_kind != Spasm_x86_64_OperandKind_R64 &&
+       index_kind != Spasm_x86_64_OperandKind_XMM &&
+       index_kind != Spasm_x86_64_OperandKind_YMM)
     {
-        /* mod=11 (register-direct) */
-        result.modrm = (0x3 << 6) |
-                       (spasm_x86_64_get_rm(dst->reg));
-
-        if(instr_info->reg_in_modrm_reg)
-            result.modrm |= (instr_info->modrm_reg_operand << 3);
-
-        return result;
-    }
-
-    const SpasmOperand* mem_operand = (dst->type == SpasmOperandType_Mem) ? dst : src;
-    const SpasmOperand* reg_operand = (dst->type == SpasmOperandType_Mem) ? src : dst;
-    bool mem_is_dest = (dst->type == SpasmOperandType_Mem);
-
-    SpasmRegister base = mem_operand->mem_reg;
-    SpasmRegister index = mem_operand->mem_index;
-    uint8_t scale = mem_operand->mem_scale;
-    int32_t disp = mem_operand->mem_displacement;
-
-    uint8_t scale_bits = 0;
-
-    if(scale == 2)
-        scale_bits = 1;
-    else if (scale == 4)
-        scale_bits = 2;
-    else if (scale == 8)
-        scale_bits = 3;
-    else if (scale != 1 && scale != 0)
-        /* Invalid scale, return empty result */
-        return result;
-
-    uint8_t mod = 0;
-
-    if(disp == 0 && base != SpasmRegister_x86_64_RBP && base != SpasmRegister_x86_64_R13)
-    {
-        mod = 0;
-    }
-    else if (disp >= -128 && disp <= 127)
-    {
-        mod = 1;
-        result.has_disp8 = true;
-        result.disp8 = (SpasmByte)disp;
-    }
-    else
-    {
-        mod = 2;
-        result.has_disp32 = true;
-        result.disp32 = disp;
-    }
-
-    uint8_t rm = 0;
-
-    if(index != SpasmRegister_x86_64_NONE ||
-       scale != 1 ||
-       base == SpasmRegister_x86_64_RSP ||
-       base == SpasmRegister_x86_64_R12)
-    {
-        /* SIB is required for index, non-1 scale, or RSP/R12 as base */
-        result.has_sib = true;
-        rm = 4; /* rm=100 indicates SIB follows */
-
-        if(index == SpasmRegister_x86_64_NONE)
-            result.sib = (scale_bits << 6) | (4 << 3) | spasm_x86_64_get_rm(base); /* index=100 (none) */
-        else
-            result.sib = (scale_bits << 6) | (spasm_x86_64_get_rm(index) << 3) | spasm_x86_64_get_rm(base);
-    }
-    else if (base == SpasmRegister_x86_64_RIP)
-    {
-        /* RIP-relative addressing */
-        mod = 0; /* mod=00 for RIP-relative */
-        rm = 5;  /* rm=101 for RIP */
-        result.has_disp32 = true;
-        result.disp32 = disp;
-    }
-    else if(base == SpasmRegister_x86_64_NONE)
-    {
-        /* Absolute addressing ([disp32]) */
-        mod = 0;
-        rm = 5; /* rm=101 with no base */
-        result.has_disp32 = true;
-        result.disp32 = disp;
-    }
-    else
-    {
-        /* Simple base addressing ([base] or [base + disp]) */
-        rm = spasm_x86_64_get_rm(base);
-    }
-
-    /* Set ModR/M: mod, reg, rm */
-    result.modrm = (mod << 6) | (spasm_x86_64_get_rm(reg_operand->reg) << 3) | rm;
-
-    /* Adjust for VEX/EVEX vvvv field if src is memory */
-    if(mem_is_dest && prefix_info->needs_vex2 || prefix_info->needs_vex3 || prefix_info->needs_evex)
-        prefix_info->vvvv = spasm_x86_64_get_rm(src->reg) & 0xF;
-
-    return result;
-}
-
-bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out)
-{
-    const Spasm_x86_64_InstructionInfo* info = NULL;
-
-    for(size_t i = 0; i < spasm_x86_64_instruction_table_size; i++)
-    {
-        const Spasm_x86_64_InstructionInfo* current_instr = &spasm_x86_64_instruction_table[i];
-
-        if(instr->mnemonic_len == current_instr->mnemonic_len && strcmp(instr->mnemonic, current_instr->mnemonic) == 0)
-        {
-            bool match = true;
-
-            for(uint8_t j = 0; j < instr->num_operands; j++)
-            {
-                if(instr->operands[j].type != current_instr->operand_types[j])
-                {
-                    match = false;
-                    break;
-                }
-
-                const size_t operand_size = spasm_x86_64_get_operand_size(&instr->operands[j],
-                                                                          current_instr->operand_sizes[j]);
-
-                if(current_instr->operand_sizes[j] != 0 &&
-                   operand_size != current_instr->operand_sizes[j])
-                {
-                    match = false;
-                    break;
-                }
-            }
-
-            if(match)
-            {
-                info = current_instr;
-                break;
-            }
-        }
-    }
-
-    if(info == NULL)
-    {
-        spasm_error("Cannot find encoding info for instruction: %s", instr->mnemonic);
-
-        char instr_buffer[64];
-        const size_t instr_buffer_len = spasm_x86_64_instruction_debug(instr, instr_buffer, 64);
-
-        spasm_error("Instruction: %.*s", (int)instr_buffer_len, instr_buffer);
-
+        spasm_error("Invalid memory operand index: must be a 64-bit register (or xmm/ymm for vsib)");
         return false;
     }
 
-    /*
-        A REX prefix must be encoded when:
-            - using 64-bit operand size and the instruction does not default to 64-bit operand size
-            - using one of th extended registers (reg code > 7)
-            - using one of the uniform byte registers SPL, BPL, SIL or DIL
-    */
-
-    bool needs_rex = spasm_x86_64_needs_rex(instr);
-
-    Spasm_x86_64_PrefixInfo prefix_info =
+    if(index == SpasmRegister_x86_64_RSP)
     {
-        .needs_rex = (info->prefix == Spasm_x86_64_PrefixType_REX) | needs_rex,
-        .needs_vex2 = (info->prefix == Spasm_x86_64_PrefixType_VEX2),
-        .needs_vex3 = (info->prefix == Spasm_x86_64_PrefixType_VEX3),
-        .needs_evex = (info->prefix == Spasm_x86_64_PrefixType_EVEX),
-        .pp = info->pp,
-        .mmmmm = info->mmmmm,
-        .vector_len = (info->operand_sizes[0] == 512) ? 2 :
-                      (info->operand_sizes[0] == 256) ? 1 : 0,
-    };
-
-    Spasm_x86_64_PrefixBytes prefix = spasm_encode_x86_64_prefix(prefix_info,
-                                                                 info,
-                                                                 instr->operands,
-                                                                 instr->num_operands);
-
-    Spasm_x86_64_ModRMSibOffset modrm_sib;
-    memset(&modrm_sib, 0, sizeof(Spasm_x86_64_ModRMSibOffset));
-
-    if(info->needs_modrm)
-        modrm_sib = spasm_x86_64_operands_as_modrm_sib_offset(&instr->operands[0],
-                                                              &instr->operands[1],
-                                                              &prefix_info,
-                                                              info);
-
-    for(uint8_t i = 0; i < prefix.len; i++)
-    {
-        spasm_bytecode_push_back(out, prefix.bytes[i]);
+        spasm_error("Invalid memory operand index: rsp cannot be used as an index");
+        return false;
     }
 
-    for(uint8_t i = 0; i < info->opcode_len; i++)
+    if(base == SpasmRegister_x86_64_RIP)
     {
-        SpasmByte opcode = info->opcode[i];
-
-        if(info->opcode[i] == 0x00 && i == 0) // Handle +r
-            opcode = info->opcode[i] + (spasm_x86_64_get_register_code(instr->operands[0].reg) & 0x7);
-
-        spasm_bytecode_push_back(out, opcode);
-    }
-
-    if(info->needs_modrm)
-    {
-        /* Adjust ModR/M for /0, /1, etc. */
-        if(info->opcode[info->opcode_len - 1] != 0x00 &&
-           (info->opcode[info->opcode_len - 1] & 0xF0) == 0x00)
-            modrm_sib.modrm |= (info->opcode[info->opcode_len - 1] << 3); /* Set reg field for /0, /1, etc. */
-
-        spasm_bytecode_push_back(out, modrm_sib.modrm);
-
-        if(modrm_sib.has_sib)
-            spasm_bytecode_push_back(out, modrm_sib.sib);
-
-        if(modrm_sib.has_disp8)
+        if(index != SpasmRegister_x86_64_NONE)
         {
-            spasm_bytecode_push_back(out, modrm_sib.disp8);
+            spasm_error("Invalid memory operand: rip-relative addressing cannot have an index");
+            return false;
         }
-        else if(modrm_sib.has_disp32)
+
+        spasm_x86_64_emit(enc, (SpasmByte)((reg_field << 3) | 0x5));
+        spasm_x86_64_emit_le(enc, disp, 4);
+
+        return true;
+    }
+
+    const SpasmByte index_code = index != SpasmRegister_x86_64_NONE ?
+                                 spasm_x86_64_get_register_code(index) & 0x7 :
+                                 0x4;
+
+    if(base == SpasmRegister_x86_64_NONE)
+    {
+        spasm_x86_64_emit(enc, (SpasmByte)((reg_field << 3) | 0x4));
+        spasm_x86_64_emit(enc, (SpasmByte)((scale_bits << 6) | (index_code << 3) | 0x5));
+        spasm_x86_64_emit_le(enc, disp, 4);
+
+        return true;
+    }
+
+    if(spasm_x86_64_get_register_kind(base) != Spasm_x86_64_OperandKind_R64)
+    {
+        spasm_error("Invalid memory operand base: must be a 64-bit register or rip");
+        return false;
+    }
+
+    const SpasmByte base_code = spasm_x86_64_get_register_code(base) & 0x7;
+
+    SpasmByte mod;
+
+    if(disp == 0 && base_code != 0x5)
+        mod = 0x0;
+    else if(disp >= -128 && disp <= 127)
+        mod = 0x1;
+    else
+        mod = 0x2;
+
+    if(index != SpasmRegister_x86_64_NONE || base_code == 0x4)
+    {
+        spasm_x86_64_emit(enc, (SpasmByte)((mod << 6) | (reg_field << 3) | 0x4));
+        spasm_x86_64_emit(enc, (SpasmByte)((scale_bits << 6) | (index_code << 3) | base_code));
+    }
+    else
+    {
+        spasm_x86_64_emit(enc, (SpasmByte)((mod << 6) | (reg_field << 3) | base_code));
+    }
+
+    if(mod == 0x1)
+        spasm_x86_64_emit_le(enc, disp, 1);
+    else if(mod == 0x2)
+        spasm_x86_64_emit_le(enc, disp, 4);
+
+    return true;
+}
+
+static bool spasm_x86_64_encode_form(const Spasm_x86_64_Form* form,
+                                     const SpasmInstruction* instr,
+                                     Spasm_x86_64_Encoding* enc)
+{
+    const SpasmOperand* reg_operand = NULL;
+    const SpasmOperand* rm_operand = NULL;
+    const SpasmOperand* opcode_operand = NULL;
+    const SpasmOperand* vvvv_operand = NULL;
+
+    bool needs_rex = false;
+
+    for(uint8_t i = 0; i < instr->num_operands; i++)
+    {
+        const SpasmOperand* operand = &instr->operands[i];
+
+        switch(SPASM_X86_64_FORM_ROLE(form, i))
         {
-            spasm_bytecode_push_back(out, modrm_sib.disp32 & 0xFF);
-            spasm_bytecode_push_back(out, (modrm_sib.disp32 >> 8) & 0xFF);
-            spasm_bytecode_push_back(out, (modrm_sib.disp32 >> 16) & 0xFF);
-            spasm_bytecode_push_back(out, (modrm_sib.disp32 >> 24) & 0xFF);
+            case Spasm_x86_64_OperandRole_ModRMReg: reg_operand = operand; break;
+            case Spasm_x86_64_OperandRole_ModRMRm: rm_operand = operand; break;
+            case Spasm_x86_64_OperandRole_OpcodeReg: opcode_operand = operand; break;
+            case Spasm_x86_64_OperandRole_Vvvv: vvvv_operand = operand; break;
+            default: break;
+        }
+
+        if(operand->type == SpasmOperandType_Register && spasm_x86_64_is_uniform_byte_register(operand->reg))
+            needs_rex = true;
+    }
+
+    SpasmByte rex_w = (form->flags & Spasm_x86_64_FormFlag_REXW) ? 1 : 0;
+    SpasmByte rex_r = 0;
+    SpasmByte rex_x = 0;
+    SpasmByte rex_b = 0;
+
+    if(reg_operand != NULL)
+        rex_r = spasm_x86_64_get_register_code(reg_operand->reg) >> 3;
+
+    if(rm_operand != NULL && rm_operand->type == SpasmOperandType_Register)
+        rex_b = spasm_x86_64_get_register_code(rm_operand->reg) >> 3;
+
+    if(rm_operand != NULL && rm_operand->type == SpasmOperandType_Mem)
+    {
+        if(rm_operand->mem_reg != SpasmRegister_x86_64_NONE &&
+           rm_operand->mem_reg != SpasmRegister_x86_64_RIP)
+            rex_b = spasm_x86_64_get_register_code(rm_operand->mem_reg) >> 3;
+
+        if(rm_operand->mem_index != SpasmRegister_x86_64_NONE)
+            rex_x = spasm_x86_64_get_register_code(rm_operand->mem_index) >> 3;
+    }
+
+    if(opcode_operand != NULL)
+        rex_b = spasm_x86_64_get_register_code(opcode_operand->reg) >> 3;
+
+    if(form->flags & Spasm_x86_64_FormFlag_VEX)
+    {
+        /*
+            VEX stores R, X, B and vvvv inverted. pp replaces the 66/F3/F2 prefix and mmmmm the
+            0F/0F38/0F3A escape. The 2-byte form (C5) implies X = B = W = 0 and mmmmm = 0F
+        */
+        const SpasmByte vex_w = (form->flags & Spasm_x86_64_FormFlag_VEXW) ? 1 : 0;
+        const SpasmByte vex_l = (form->flags & Spasm_x86_64_FormFlag_VEXL) ? 1 : 0;
+        const SpasmByte vex_pp = (form->vex >> 5) & 0x3;
+        const SpasmByte vex_mmmmm = form->vex & 0x1F;
+        const SpasmByte vvvv = vvvv_operand != NULL ? spasm_x86_64_get_register_code(vvvv_operand->reg) : 0;
+        const SpasmByte inverted_vvvv = (SpasmByte)(~vvvv & 0xF);
+
+        if(rex_x == 0 && rex_b == 0 && vex_w == 0 && vex_mmmmm == 0x1)
+        {
+            spasm_x86_64_emit(enc, 0xC5);
+            spasm_x86_64_emit(enc, (SpasmByte)(((rex_r ^ 1) << 7) | (inverted_vvvv << 3) | (vex_l << 2) | vex_pp));
+        }
+        else
+        {
+            spasm_x86_64_emit(enc, 0xC4);
+            spasm_x86_64_emit(enc, (SpasmByte)(((rex_r ^ 1) << 7) | ((rex_x ^ 1) << 6) | ((rex_b ^ 1) << 5) | vex_mmmmm));
+            spasm_x86_64_emit(enc, (SpasmByte)((vex_w << 7) | (inverted_vvvv << 3) | (vex_l << 2) | vex_pp));
+        }
+    }
+    else
+    {
+        if(form->flags & Spasm_x86_64_FormFlag_P66)
+            spasm_x86_64_emit(enc, 0x66);
+
+        if(form->flags & Spasm_x86_64_FormFlag_PF2)
+            spasm_x86_64_emit(enc, 0xF2);
+
+        if(form->flags & Spasm_x86_64_FormFlag_PF3)
+            spasm_x86_64_emit(enc, 0xF3);
+
+        if(needs_rex || rex_w || rex_r || rex_x || rex_b)
+            spasm_x86_64_emit(enc, (SpasmByte)(0x40 | (rex_w << 3) | (rex_r << 2) | (rex_x << 1) | rex_b));
+    }
+
+    for(uint8_t i = 0; i < form->opcode_len; i++)
+        spasm_x86_64_emit(enc, form->opcode[i]);
+
+    if(opcode_operand != NULL)
+        enc->bytes[enc->len - 1] += spasm_x86_64_get_register_code(opcode_operand->reg) & 0x7;
+
+    if(form->modrm != SPASM_X86_64_MODRM_NONE)
+    {
+        const SpasmByte reg_field = form->modrm == SPASM_X86_64_MODRM_REG ?
+                                    spasm_x86_64_get_register_code(reg_operand->reg) & 0x7 :
+                                    form->modrm;
+
+        if(rm_operand->type == SpasmOperandType_Register)
+        {
+            spasm_x86_64_emit(enc, (SpasmByte)(0xC0 |
+                                               (reg_field << 3) |
+                                               (spasm_x86_64_get_register_code(rm_operand->reg) & 0x7)));
+        }
+        else if(!spasm_x86_64_encode_memory(rm_operand, reg_field, enc))
+        {
+            return false;
         }
     }
 
     for(uint8_t i = 0; i < instr->num_operands; i++)
     {
-        if (instr->operands[i].type >= SpasmOperandType_Imm8 &&
-            instr->operands[i].type <= SpasmOperandType_Imm64)
+        const Spasm_x86_64_OperandRole role = SPASM_X86_64_FORM_ROLE(form, i);
+
+        if(role == Spasm_x86_64_OperandRole_Imm || role == Spasm_x86_64_OperandRole_Rel)
+            spasm_x86_64_emit_le(enc,
+                                 instr->operands[i].imm_value,
+                                 spasm_x86_64_get_immediate_size((Spasm_x86_64_OperandKind)form->operands[i]));
+        else if(role == Spasm_x86_64_OperandRole_Is4)
+            spasm_x86_64_emit(enc, (SpasmByte)(spasm_x86_64_get_register_code(instr->operands[i].reg) << 4));
+    }
+
+    return true;
+}
+
+/*
+    Commutative VEX forms: swapping the sources can move an extended register from ModRM.rm (VEX.B)
+    to vvvv, which allows the 2-byte VEX prefix. Returns false if the sources cannot be swapped
+*/
+static bool spasm_x86_64_swap_vex_sources(const Spasm_x86_64_Form* form,
+                                          const SpasmInstruction* instr,
+                                          SpasmOperand* swapped_operands,
+                                          SpasmInstruction* swapped)
+{
+    if(!(form->flags & Spasm_x86_64_FormFlag_VEX) || !(form->vex & SPASM_X86_64_VEX_COMMUTABLE))
+        return false;
+
+    int32_t vvvv_index = -1;
+    int32_t rm_index = -1;
+    int32_t imm_index = -1;
+
+    for(uint8_t i = 0; i < instr->num_operands; i++)
+    {
+        switch(SPASM_X86_64_FORM_ROLE(form, i))
         {
-            int64_t imm = instr->operands[i].imm_value;
-
-            int bytes = 1 << (instr->operands[i].type - SpasmOperandType_Imm8);
-
-            for(int j = 0; j < bytes; j++)
-                spasm_bytecode_push_back(out, (imm >> (j * 8)) & 0xFF);
+            case Spasm_x86_64_OperandRole_Vvvv: vvvv_index = i; break;
+            case Spasm_x86_64_OperandRole_ModRMRm: rm_index = i; break;
+            case Spasm_x86_64_OperandRole_Imm: imm_index = i; break;
+            default: break;
         }
     }
+
+    if(vvvv_index < 0 || rm_index < 0 || instr->operands[rm_index].type != SpasmOperandType_Register)
+        return false;
+
+    /* vcmpps/vcmppd (0F C2) are only symmetric for the EQ, UNORD, NEQ and ORD predicates */
+    if(form->opcode[form->opcode_len - 1] == 0xC2)
+    {
+        const int64_t predicate = imm_index >= 0 ? (instr->operands[imm_index].imm_value & 0x7) : -1;
+
+        if(predicate != 0 && predicate != 3 && predicate != 4 && predicate != 7)
+            return false;
+    }
+
+    memcpy(swapped_operands, instr->operands, instr->num_operands * sizeof(SpasmOperand));
+    swapped_operands[vvvv_index] = instr->operands[rm_index];
+    swapped_operands[rm_index] = instr->operands[vvvv_index];
+
+    *swapped = *instr;
+    swapped->operands = swapped_operands;
+
+    return true;
+}
+
+bool spasm_x86_64_encode_instruction(SpasmInstruction* instr, SpasmByteCode* out)
+{
+    const Spasm_x86_64_MnemonicKeyword* mnemonic = spasm_x86_64_mnemonic_lookup(instr->mnemonic,
+                                                                                instr->mnemonic_len);
+
+    if(mnemonic == NULL)
+    {
+        spasm_error("Unknown instruction: %.*s", (int)instr->mnemonic_len, instr->mnemonic);
+        return false;
+    }
+
+    /* Every matching form is encoded and the shortest one is kept, the first one on ties */
+    Spasm_x86_64_Encoding enc;
+    Spasm_x86_64_Encoding candidate;
+    const Spasm_x86_64_Form* selected = NULL;
+    uint8_t selected_memory_size = 0;
+
+    for(uint32_t i = mnemonic->first; i < (uint32_t)(mnemonic->first + mnemonic->count); i++)
+    {
+        const Spasm_x86_64_Form* form = &spasm_x86_64_forms[i];
+
+        if(!spasm_x86_64_form_matches(form, instr))
+            continue;
+
+        const uint8_t memory_size = spasm_x86_64_get_form_memory_size(form);
+
+        if(selected != NULL && memory_size != selected_memory_size)
+        {
+            char instr_buffer[128];
+            const size_t instr_buffer_len = spasm_x86_64_instruction_debug(instr, instr_buffer, 128);
+
+            spasm_error("Ambiguous memory operand size, use a sized memory operand: %.*s",
+                        (int)instr_buffer_len,
+                        instr_buffer);
+
+            return false;
+        }
+
+        candidate.len = 0;
+
+        if(!spasm_x86_64_encode_form(form, instr, &candidate))
+            return false;
+
+        if(selected == NULL || candidate.len < enc.len)
+            enc = candidate;
+
+        SpasmOperand swapped_operands[4];
+        SpasmInstruction swapped;
+
+        if(spasm_x86_64_swap_vex_sources(form, instr, swapped_operands, &swapped))
+        {
+            candidate.len = 0;
+
+            if(spasm_x86_64_encode_form(form, &swapped, &candidate) && candidate.len < enc.len)
+                enc = candidate;
+        }
+
+        selected = form;
+        selected_memory_size = memory_size;
+    }
+
+    if(selected == NULL)
+    {
+        char instr_buffer[128];
+        const size_t instr_buffer_len = spasm_x86_64_instruction_debug(instr, instr_buffer, 128);
+
+        spasm_error("Cannot find an encoding for instruction: %.*s", (int)instr_buffer_len, instr_buffer);
+
+        return false;
+    }
+
+    for(uint32_t i = 0; i < enc.len; i++)
+        spasm_bytecode_push_back(out, enc.bytes[i]);
 
     return true;
 }

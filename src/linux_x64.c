@@ -33,6 +33,7 @@ bool spasm_linux_x64_jit(SpasmInstructions* instructions, SpasmByteCode* bytecod
 
             data_operand->type = SpasmOperandType_Imm64;
             data_operand->imm_value = spasm_data_get_jit_address(data, data_id);
+            data_operand->imm_fixed = true;
         }
 
         if(!spasm_x86_64_encode_instruction(instr, bytecode))
