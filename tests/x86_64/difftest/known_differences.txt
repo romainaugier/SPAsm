@@ -1,4 +1,7 @@
-# Instructions where SPAsm and llvm-mc produce different but equivalent encodings.
+# Instructions where SPAsm and llvm-mc produce different but equivalent encodings, or where only
+# one of them accepts the instruction.
 # One per line: <intel syntax as printed by difftest_dump> | <reason>
+# The line can also be a regular expression between slashes: /^vaesenc .*/ | <reason>
 
 xchg rax, rax | llvm-mc emits 90 (nop), SPAsm emits 48 90 (REX.W xchg rax, rax), both leave rax unchanged
+/^(vaesenc|vaesenclast|vaesdec|vaesdeclast|vpclmulqdq) .*\b[xy]mm(1[6-9]|2[0-9]|3[01])\b/ | VAES/VPCLMULQDQ EVEX forms (needed for xmm/ymm16-31) are not in the Opcodes data SPAsm is generated from

@@ -36,6 +36,8 @@ int main(void)
         { "int", { SpasmOpImm8(3) }, 1, { 0xCC }, 1 },
         /* pextrw r32, xmm, imm8: 0F C5 is shorter than the SSE4.1 0F 3A 15 */
         { "pextrw", { REG(ECX), REG(XMM1), SpasmOpImm8(2) }, 3, { 0x66, 0x0F, 0xC5, 0xC9, 0x02 }, 5 },
+        /* rorx: the imm8 is a rotation count, not sign-extended */
+        { "rorx", { REG(RAX), REG(RCX), SpasmOpImm32(200) }, 3, { 0xC4, 0xE3, 0xFB, 0xF0, 0xC1, 0xC8 }, 6 },
         /* xchg ecx, eax: 90+r */
         { "xchg", { REG(ECX), REG(EAX) }, 2, { 0x91 }, 1 },
         /* xchg eax, eax: 90 is nop and would not zero the upper half of rax */

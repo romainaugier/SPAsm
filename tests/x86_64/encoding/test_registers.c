@@ -74,6 +74,43 @@ void test_bswap_r12(void)
         expected, sizeof(expected));
 }
 
+/* xmm16-31 need EVEX, which no form of addps has */
+void test_addps_xmm16(void)
+{
+    assemble_and_expect_failure("addps",
+        SpasmOpReg(SpasmRegister_x86_64_XMM1),
+        SpasmOpReg(SpasmRegister_x86_64_XMM16));
+}
+
+/* ah, ch, dh and bh only exist without REX */
+void test_high_byte_registers(void)
+{
+    /* mov ah, bl => 88 DC */
+    const uint8_t mov_ah_bl[] = { 0x88, 0xDC };
+    assemble_and_expect("mov", SpasmOpReg(SpasmRegister_x86_64_AH), SpasmOpReg(SpasmRegister_x86_64_BL),
+                        mov_ah_bl, sizeof(mov_ah_bl));
+
+    /* movzx eax, ah => 0F B6 C4 */
+    const uint8_t movzx_eax_ah[] = { 0x0F, 0xB6, 0xC4 };
+    assemble_and_expect("movzx", SpasmOpReg(SpasmRegister_x86_64_EAX), SpasmOpReg(SpasmRegister_x86_64_AH),
+                        movzx_eax_ah, sizeof(movzx_eax_ah));
+
+    /* mov ch, 5 => B5 05 */
+    const uint8_t mov_ch_5[] = { 0xB5, 0x05 };
+    assemble_and_expect("mov", SpasmOpReg(SpasmRegister_x86_64_CH), SpasmOpImm8(5),
+                        mov_ch_5, sizeof(mov_ch_5));
+
+    /* add dh, byte ptr [rax] => 02 30 */
+    const uint8_t add_dh_mem[] = { 0x02, 0x30 };
+    assemble_and_expect("add", SpasmOpReg(SpasmRegister_x86_64_DH), SpasmOpMemory(SpasmRegister_x86_64_RAX, 0, 0, 1),
+                        add_dh_mem, sizeof(add_dh_mem));
+
+    assemble_and_expect_failure("mov", SpasmOpReg(SpasmRegister_x86_64_AH), SpasmOpReg(SpasmRegister_x86_64_R9B));
+    assemble_and_expect_failure("mov", SpasmOpReg(SpasmRegister_x86_64_BH), SpasmOpReg(SpasmRegister_x86_64_SIL));
+    assemble_and_expect_failure("movzx", SpasmOpReg(SpasmRegister_x86_64_RAX), SpasmOpReg(SpasmRegister_x86_64_AH));
+    assemble_and_expect_failure("mov", SpasmOpReg(SpasmRegister_x86_64_AH), SpasmOpMemory(SpasmRegister_x86_64_R8, 0, 0, 1));
+}
+
 int main(void)
 {
     test_mov_ecx_edx();
@@ -82,6 +119,8 @@ int main(void)
     test_mov_dil_al();
     test_mov_si_bp();
     test_bswap_r12();
+    test_addps_xmm16();
+    test_high_byte_registers();
 
     return 0;
 }

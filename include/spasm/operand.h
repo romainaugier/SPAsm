@@ -20,7 +20,18 @@ typedef enum
     SpasmOperandType_Imm64,
     SpasmOperandType_Data,
     SpasmOperandType_Symbol,
+    SpasmOperandType_Rounding,
 } SpasmOperandType;
+
+/* AVX-512 embedded rounding ({rn-sae}...) and suppress-all-exceptions ({sae}) */
+typedef enum
+{
+    SpasmRounding_Nearest,
+    SpasmRounding_Down,
+    SpasmRounding_Up,
+    SpasmRounding_Zero,
+    SpasmRounding_SAE,
+} SpasmRounding;
 
 /*
     Operand is 128 bits. Maybe we can limit imm_value to be 56 bits and pack an operand into 64 bits,
@@ -41,12 +52,19 @@ typedef struct
     /* The immediate keeps the width of its type instead of the shortest one (e.g. relocations) */
     bool imm_fixed;
 
+    /* AVX-512 opmask of the destination operand ({k1}-{k7}), 0 when not masked */
+    uint8_t mask;
+
+    /* Zeroing-masking ({z}) instead of merging-masking, register destinations only */
+    bool zeroing;
+
     union { struct {
         uint8_t mem_reg;
         uint8_t mem_index;
         int32_t mem_displacement;
         uint8_t mem_scale;
-        uint8_t mem_size; /* In bytes, 0 when not specified */
+        uint8_t mem_size; /* In bytes, 0 when not specified. The element size when broadcast */
+        uint8_t mem_broadcast; /* AVX-512 embedded broadcast ({1toN}): N, 0 when not broadcast */
     }; };
 
     union {
@@ -131,12 +149,54 @@ typedef struct
     .mem_scale = (uint8_t)(scale),                                   \
     .mem_size = (uint8_t)(size)})
 
+/* AVX-512 masked destinations, k is SpasmRegister_x86_64_K1-K7 */
+#define SpasmOpRegMask(r, k) ((SpasmOperand){ \
+    .type = SpasmOperandType_Register,     \
+    .reg = (uint8_t)(r),                   \
+    .mask = (uint8_t)(k)})
+
+#define SpasmOpRegMaskZ(r, k) ((SpasmOperand){ \
+    .type = SpasmOperandType_Register,      \
+    .reg = (uint8_t)(r),                    \
+    .mask = (uint8_t)(k),                   \
+    .zeroing = true})
+
+#define SpasmOpMemoryMask(r, idx, disp, scale, size, k) ((SpasmOperand){ \
+    .type = SpasmOperandType_Mem,                                      \
+    .mem_reg = (uint8_t)(r),                                           \
+    .mem_index = (uint8_t)(idx),                                       \
+    .mem_displacement = (int32_t)(disp),                               \
+    .mem_scale = (uint8_t)(scale),                                     \
+    .mem_size = (uint8_t)(size),                                       \
+    .mask = (uint8_t)(k)})
+
+/*
+    AVX-512 embedded broadcast: one element_size element of [r + idx * scale + disp] broadcast to
+    count elements ({1tocount}), e.g. dword ptr [rax]{1to16} is (RAX, 0, 0, 1, 4, 16)
+*/
+#define SpasmOpMemoryBroadcast(r, idx, disp, scale, element_size, count) ((SpasmOperand){ \
+    .type = SpasmOperandType_Mem,                                                       \
+    .mem_reg = (uint8_t)(r),                                                            \
+    .mem_index = (uint8_t)(idx),                                                        \
+    .mem_displacement = (int32_t)(disp),                                                \
+    .mem_scale = (uint8_t)(scale),                                                      \
+    .mem_size = (uint8_t)(element_size),                                                \
+    .mem_broadcast = (uint8_t)(count)})
+
+/* AVX-512 embedded rounding/suppress-all-exceptions operand ({rn-sae}, {sae}...) */
+#define SpasmOpRounding(mode) ((SpasmOperand){ \
+    .type = SpasmOperandType_Rounding,      \
+    .imm_value = (int64_t)(mode)})
+
+#define SpasmOpSae() SpasmOpRounding(SpasmRounding_SAE)
+
 #define SpasmOpMemByte(r, idx, disp, scale) SpasmOpMemorySized(r, idx, disp, scale, 1)
 #define SpasmOpMemWord(r, idx, disp, scale) SpasmOpMemorySized(r, idx, disp, scale, 2)
 #define SpasmOpMemDword(r, idx, disp, scale) SpasmOpMemorySized(r, idx, disp, scale, 4)
 #define SpasmOpMemQword(r, idx, disp, scale) SpasmOpMemorySized(r, idx, disp, scale, 8)
 #define SpasmOpMemXmmword(r, idx, disp, scale) SpasmOpMemorySized(r, idx, disp, scale, 16)
 #define SpasmOpMemYmmword(r, idx, disp, scale) SpasmOpMemorySized(r, idx, disp, scale, 32)
+#define SpasmOpMemZmmword(r, idx, disp, scale) SpasmOpMemorySized(r, idx, disp, scale, 64)
 
 #define SpasmOpData(id) ((SpasmOperand){ \
     .type = SpasmOperandType_Data,     \

@@ -16,8 +16,11 @@ typedef enum
     SpasmRegister_x86_64_NONE,
 
     /*
-        Each group of 16 follows the hardware register number (ModRM/SIB/REX), so the encoding
-        of a register is (reg - 1) % 16 for every group up to ZMM15
+        Registers are grouped by class, in hardware register number order (ModRM/SIB/REX/VEX/EVEX):
+         - general purpose: 4 groups of 16, the number is (reg - AL) % 16
+         - vector: 3 groups of 32 (xmm, ymm, zmm), the number is (reg - XMM0) % 32
+         - opmask: k0-k7, the number is reg - K0
+         - high byte: ah, ch, dh, bh are numbers 4-7, only encodable without REX
     */
 
     /* 8-bit low */
@@ -92,7 +95,7 @@ typedef enum
     SpasmRegister_x86_64_R14,
     SpasmRegister_x86_64_R15,
 
-    /* x86_64 SIMD */
+    /* 128-bit SSE/AVX/AVX-512 */
     SpasmRegister_x86_64_XMM0,
     SpasmRegister_x86_64_XMM1,
     SpasmRegister_x86_64_XMM2,
@@ -109,7 +112,24 @@ typedef enum
     SpasmRegister_x86_64_XMM13,
     SpasmRegister_x86_64_XMM14,
     SpasmRegister_x86_64_XMM15,
+    SpasmRegister_x86_64_XMM16,
+    SpasmRegister_x86_64_XMM17,
+    SpasmRegister_x86_64_XMM18,
+    SpasmRegister_x86_64_XMM19,
+    SpasmRegister_x86_64_XMM20,
+    SpasmRegister_x86_64_XMM21,
+    SpasmRegister_x86_64_XMM22,
+    SpasmRegister_x86_64_XMM23,
+    SpasmRegister_x86_64_XMM24,
+    SpasmRegister_x86_64_XMM25,
+    SpasmRegister_x86_64_XMM26,
+    SpasmRegister_x86_64_XMM27,
+    SpasmRegister_x86_64_XMM28,
+    SpasmRegister_x86_64_XMM29,
+    SpasmRegister_x86_64_XMM30,
+    SpasmRegister_x86_64_XMM31,
 
+    /* 256-bit AVX/AVX-512 */
     SpasmRegister_x86_64_YMM0,
     SpasmRegister_x86_64_YMM1,
     SpasmRegister_x86_64_YMM2,
@@ -126,7 +146,24 @@ typedef enum
     SpasmRegister_x86_64_YMM13,
     SpasmRegister_x86_64_YMM14,
     SpasmRegister_x86_64_YMM15,
+    SpasmRegister_x86_64_YMM16,
+    SpasmRegister_x86_64_YMM17,
+    SpasmRegister_x86_64_YMM18,
+    SpasmRegister_x86_64_YMM19,
+    SpasmRegister_x86_64_YMM20,
+    SpasmRegister_x86_64_YMM21,
+    SpasmRegister_x86_64_YMM22,
+    SpasmRegister_x86_64_YMM23,
+    SpasmRegister_x86_64_YMM24,
+    SpasmRegister_x86_64_YMM25,
+    SpasmRegister_x86_64_YMM26,
+    SpasmRegister_x86_64_YMM27,
+    SpasmRegister_x86_64_YMM28,
+    SpasmRegister_x86_64_YMM29,
+    SpasmRegister_x86_64_YMM30,
+    SpasmRegister_x86_64_YMM31,
 
+    /* 512-bit AVX-512 */
     SpasmRegister_x86_64_ZMM0,
     SpasmRegister_x86_64_ZMM1,
     SpasmRegister_x86_64_ZMM2,
@@ -143,8 +180,24 @@ typedef enum
     SpasmRegister_x86_64_ZMM13,
     SpasmRegister_x86_64_ZMM14,
     SpasmRegister_x86_64_ZMM15,
+    SpasmRegister_x86_64_ZMM16,
+    SpasmRegister_x86_64_ZMM17,
+    SpasmRegister_x86_64_ZMM18,
+    SpasmRegister_x86_64_ZMM19,
+    SpasmRegister_x86_64_ZMM20,
+    SpasmRegister_x86_64_ZMM21,
+    SpasmRegister_x86_64_ZMM22,
+    SpasmRegister_x86_64_ZMM23,
+    SpasmRegister_x86_64_ZMM24,
+    SpasmRegister_x86_64_ZMM25,
+    SpasmRegister_x86_64_ZMM26,
+    SpasmRegister_x86_64_ZMM27,
+    SpasmRegister_x86_64_ZMM28,
+    SpasmRegister_x86_64_ZMM29,
+    SpasmRegister_x86_64_ZMM30,
+    SpasmRegister_x86_64_ZMM31,
 
-    /* AVX 512 Operation Mask Registers */
+    /* AVX-512 opmask */
     SpasmRegister_x86_64_K0,
     SpasmRegister_x86_64_K1,
     SpasmRegister_x86_64_K2,
@@ -154,8 +207,15 @@ typedef enum
     SpasmRegister_x86_64_K6,
     SpasmRegister_x86_64_K7,
 
-    /* Pointer Registers */
+    /* 8-bit high */
+    SpasmRegister_x86_64_AH,
+    SpasmRegister_x86_64_CH,
+    SpasmRegister_x86_64_DH,
+    SpasmRegister_x86_64_BH,
+
+    /* Instruction pointer */
     SpasmRegister_x86_64_RIP,
+    SpasmRegister_x86_64_EIP,
 
     /* Segment Registers */
     SpasmRegister_x86_64_CS, /* Code Segment */
@@ -163,7 +223,7 @@ typedef enum
     SpasmRegister_x86_64_SS, /* Stack Segment */
     SpasmRegister_x86_64_ES, /* Extra Segment (used for string operations) */
     SpasmRegister_x86_64_FS, /* General-purpose Segment */
-    SpasmRegister_x86_64_GS, /* General-purpose Segment  */
+    SpasmRegister_x86_64_GS, /* General-purpose Segment */
 
     /* RFlags Register */
     SpasmRegister_x86_64_RFlags,
@@ -209,9 +269,9 @@ typedef enum
     SpasmRegister_x86_64_COUNT,
 #endif /* defined(SPASM_ENABLE_X86_64) */
 
-    /* AArch64 Registers */
+    /* AArch64 Registers, numbered from 0 as operands are interpreted by their backend */
 #if defined(SPASM_ENABLE_AARCH64)
-    SpasmRegister_aarch64_NONE,
+    SpasmRegister_aarch64_NONE = 0,
 
     /* 64-bit (Xn) */
     SpasmRegister_aarch64_X0,
@@ -315,11 +375,11 @@ typedef enum
     SpasmRegister_aarch64_V30,
     SpasmRegister_aarch64_V31,
 
-    SpasmRegister_aarch64_COUNT = SpasmRegister_aarch64_V31 - SpasmRegister_aarch64_NONE,
+    SpasmRegister_aarch64_COUNT,
 #endif /* defined(SPASM_ENABLE_AARCH64) */
 
-    /* Used for parsing */
-    SpasmRegister_Invalid,
+    /* Used for parsing, registers are stored in 8 bits in operands */
+    SpasmRegister_Invalid = 0xFF,
 
 } SpasmRegister;
 

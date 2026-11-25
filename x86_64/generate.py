@@ -11,6 +11,7 @@ import sys
 import os
 import optparse
 import subprocess
+import copy
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 from opcodes import x86_64
@@ -35,6 +36,8 @@ OPERAND_KINDS = {
     "r64": "K_R64",
     "xmm": "K_XMM",
     "ymm": "K_YMM",
+    "zmm": "K_ZMM",
+    "k": "K_K",
     "al": "K_AL",
     "ax": "K_AX",
     "eax": "K_EAX",
@@ -48,10 +51,13 @@ OPERAND_KINDS = {
     "m64": "K_M64",
     "m128": "K_M128",
     "m256": "K_M256",
+    "m512": "K_M512",
     "vm32x": "K_VM32X",
     "vm32y": "K_VM32Y",
     "vm64x": "K_VM64X",
     "vm64y": "K_VM64Y",
+    "vm32z": "K_VM32Z",
+    "vm64z": "K_VM64Z",
     "imm8": "K_IMM8",
     "imm16": "K_IMM16",
     "imm32": "K_IMM32",
@@ -61,6 +67,10 @@ OPERAND_KINDS = {
     "rel8": "K_REL8",
     "rel32": "K_REL32",
 }
+
+# AVX-512 embedded rounding/sae are not operand kinds: the form accepts a rounding operand (E_ER,
+# E_SAE) placed before the immediate, or last
+ROUNDING_OPERANDS = {"{er}": "E_ER", "{sae}": "E_SAE"}
 
 # Operands that are not encoded anywhere (fixed register or fixed value)
 IMPLICIT_OPERANDS = {"al", "ax", "eax", "rax", "cl", "xmm0", "1", "3"}
@@ -91,6 +101,9 @@ COMMUTABLE_VEX_INSTRUCTIONS = {
 # Not encodable by SPAsm for now (no MMX/opmask registers, no EVEX/XOP encoding)
 SKIPPED_ISA_EXTENSIONS = {"3dnow!", "3dnow!+", "XOP", "FMA4", "TBM"}
 
+# Xeon Phi only, removed from LLVM 19 and GCC 15 (and llvm-mc 18 cannot parse the AVX512PF prefetches)
+SKIPPED_ISA_EXTENSIONS |= {"AVX512ER", "AVX512PF"}
+
 LEGACY_PREFIX_FLAGS = {
     0x66: "F_P66",
     0xF2: "F_PF2",
@@ -100,6 +113,8 @@ LEGACY_PREFIX_FLAGS = {
 CPU_FLAGS = {
     "CMOV", "MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4_1", "SSE4_2", "POPCNT",
     "AVX", "AVX2", "BMI1", "BMI2", "F16C", "FMA", "LZCNT", "MOVBE",
+    "AVX512F", "AVX512BW", "AVX512CD", "AVX512DQ", "AVX512VL", "AVX512IFMA", "AVX512VBMI",
+    "AVX512VPOPCNTDQ",
 }
 
 CPU_FLAG_ALIASES = {
@@ -134,16 +149,39 @@ class Form:
     vex_mmmmm: int = 0
     vex_pp: int = 0
     vex_commutable: int = 0
+    vector_length: int = 0
+    evex_flags: List[str] = field(default_factory=list)
+    disp8_shift: int = 0
     cpu_flag: str = "BASE"
 
 def map_cpu_flag(isa_extensions: List[x86_64.ISAExtension]) -> str:
-    for isa in isa_extensions:
-        name = CPU_FLAG_ALIASES.get(isa.name, isa.name.upper())
+    names = [CPU_FLAG_ALIASES.get(isa.name, isa.name.upper()) for isa in isa_extensions]
+    names = [name for name in names if name in CPU_FLAGS]
 
-        if name in CPU_FLAGS:
-            return name
+    # AVX512VL only says the 128/256-bit forms exist, the extension (F, BW, DQ...) is more useful
+    specific = [name for name in names if name != "AVX512VL"]
 
-    return "BASE"
+    if len(specific) > 0:
+        return specific[0]
+
+    return names[0] if len(names) > 0 else "BASE"
+
+def split_operand_type(operand_type: str) -> tuple:
+    """
+    AVX-512 operand types carry modifiers: xmm{k}{z} (opmask, zeroing), m512/m32bcst (broadcast of
+    32-bit elements). Returns (base type, opmask, zeroing, broadcast element bits)
+    """
+
+    mask = "{k}" in operand_type
+    zeroing = "{z}" in operand_type
+    base = operand_type.replace("{k}", "").replace("{z}", "")
+    broadcast = 0
+
+    if "bcst" in base:
+        base, broadcast_type = base.split("/")
+        broadcast = int(broadcast_type[1:].replace("bcst", ""))
+
+    return base, mask, zeroing, broadcast
 
 def is_imm_sign_extended(instruction_name: str, operand_types: List[str]) -> bool:
     if instruction_name in NON_SEXT_IMM_INSTRUCTIONS:
@@ -168,7 +206,11 @@ def is_imm_sign_extended(instruction_name: str, operand_types: List[str]) -> boo
 def parse_encoding(instruction: x86_64.Instruction,
                    form: x86_64.InstructionForm,
                    encoding: x86_64.Encoding) -> Optional[Form]:
-    operand_types = [op.type for op in form.operands]
+    rounding_flags = [ROUNDING_OPERANDS[op.type] for op in form.operands if op.type in ROUNDING_OPERANDS]
+    operands = [op for op in form.operands if op.type not in ROUNDING_OPERANDS]
+    full_operand_types = [op.type for op in operands]
+    split_types = [split_operand_type(t) for t in full_operand_types]
+    operand_types = [base for base, _, _, _ in split_types]
 
     if any(t not in OPERAND_KINDS for t in operand_types):
         return None
@@ -177,12 +219,33 @@ def parse_encoding(instruction: x86_64.Instruction,
         return None
 
     result = Form(mnemonic=instruction.name.lower(),
-                  operand_types=operand_types,
+                  operand_types=full_operand_types,
                   kinds=[OPERAND_KINDS[t] for t in operand_types],
                   roles=[ROLE_NONE] * len(operand_types))
 
+    result.evex_flags.extend(rounding_flags)
+
+    for i, (base, mask, zeroing, broadcast) in enumerate(split_types):
+        # Opmask and zeroing always apply to the destination
+        if (mask or zeroing) and i != 0:
+            return None
+
+        if mask:
+            result.evex_flags.append("E_MASK")
+
+            # Gathers and scatters need a mask (it tracks the elements done)
+            if any(t.startswith("vm") for t, _, _, _ in split_types):
+                result.evex_flags.append("E_MASKREQ")
+
+        if zeroing:
+            result.evex_flags.append("E_ZEROING")
+
+        # The element size is given by EVEX.W (64-bit elements when set)
+        if broadcast != 0:
+            result.evex_flags.append("E_BCST")
+
     def set_role(operand: x86_64.Operand, role: str) -> bool:
-        index = next(i for i, op in enumerate(form.operands) if op is operand)
+        index = next(i for i, op in enumerate(operands) if op is operand)
 
         if result.roles[index] != ROLE_NONE and result.roles[index] != role:
             return False
@@ -199,7 +262,7 @@ def parse_encoding(instruction: x86_64.Instruction,
             result.flags.append(LEGACY_PREFIX_FLAGS[component.byte])
         elif isinstance(component, x86_64.REX):
             if component.W == 1:
-                result.flags.append("F_REXW")
+                result.flags.append("F_W")
         elif isinstance(component, x86_64.VEX):
             if component.type != "VEX":
                 return None
@@ -207,10 +270,9 @@ def parse_encoding(instruction: x86_64.Instruction,
             result.flags.append("F_VEX")
 
             if component.W == 1:
-                result.flags.append("F_VEXW")
+                result.flags.append("F_W")
 
-            if component.L == 1:
-                result.flags.append("F_VEXL")
+            result.vector_length = 1 if component.L == 1 else 0
 
             result.vex_mmmmm = component.mmmmm
             result.vex_pp = component.pp
@@ -219,7 +281,25 @@ def parse_encoding(instruction: x86_64.Instruction,
             if isinstance(component.vvvv, x86_64.Operand) and not set_role(component.vvvv, ROLE_VVVV):
                 return None
         elif isinstance(component, x86_64.EVEX):
-            return None
+            result.flags.append("F_EVEX")
+
+            if component.W == 1:
+                result.flags.append("F_W")
+
+            # With {er}, L'L holds the rounding mode set by the encoder, the vector length is the
+            # one of the form without rounding
+            if isinstance(component.LL, int):
+                result.vector_length = component.LL
+            else:
+                result.vector_length = 2 if "zmm" in operand_types else 1 if "ymm" in operand_types else 0
+            result.vex_mmmmm = component.mm
+            result.vex_pp = component.pp
+
+            if isinstance(component.disp8xN, int):
+                result.disp8_shift = component.disp8xN.bit_length() - 1
+
+            if isinstance(component.vvvv, x86_64.Operand) and not set_role(component.vvvv, ROLE_VVVV):
+                return None
         elif isinstance(component, x86_64.Opcode):
             result.opcode.append(component.byte)
 
@@ -257,12 +337,79 @@ def parse_encoding(instruction: x86_64.Instruction,
     if len(result.opcode) == 0 or len(result.opcode) > 3:
         return None
 
-    if is_imm_sign_extended(instruction.name, operand_types):
+    if len(result.evex_flags) > 0 and "F_EVEX" not in result.flags:
+        print(f"Warning: {instruction.name} has AVX-512 operand modifiers without EVEX, skipping")
+        return None
+
+    if "F_VEX" not in result.flags and "F_EVEX" not in result.flags and \
+       is_imm_sign_extended(instruction.name, operand_types):
         result.flags.append("F_IMMSEXT")
 
     result.cpu_flag = map_cpu_flag(form.isa_extensions)
 
     return result
+
+def fix_opcodes_data(form: Form) -> None:
+    """Errors of the Opcodes AVX-512 data, found with the llvm-mc differential test"""
+
+    # vmovntps has no mandatory prefix, Opcodes gives pp = 66 for the 128/256-bit EVEX forms
+    if form.mnemonic == "vmovntps" and "F_EVEX" in form.flags:
+        form.vex_pp = 0
+
+    # vsqrtpd broadcasts 64-bit elements (EVEX.W1), Opcodes gives m32bcst for the 128/256-bit forms
+    if form.mnemonic == "vsqrtpd":
+        form.operand_types = [t.replace("m32bcst", "m64bcst") for t in form.operand_types]
+
+def merge_rounding_forms(forms: List[Form]) -> List[Form]:
+    """
+    Opcodes lists the {er}/{sae} variants as separate forms. They have the same encoding as the
+    form without rounding (only EVEX.b and L'L change), so their flag goes on that form. When the
+    form without rounding is missing from the data (vaddss xmm{k}{z}, xmm, xmm), the rounding form
+    is kept for both
+    """
+
+    def key(form: Form) -> tuple:
+        flags = [f for f in form.evex_flags if f not in ROUNDING_OPERANDS.values()]
+        return (tuple(form.kinds), tuple(form.roles), tuple(form.opcode), form.modrm, tuple(form.flags),
+                form.vex_mmmmm, form.vex_pp, tuple(flags))
+
+    plain_forms = dict((key(f), f) for f in forms if not any(e in ROUNDING_OPERANDS.values() for e in f.evex_flags))
+    merged = list()
+
+    for form in forms:
+        rounding = [e for e in form.evex_flags if e in ROUNDING_OPERANDS.values()]
+
+        if len(rounding) == 0 or key(form) not in plain_forms:
+            merged.append(form)
+            continue
+
+        plain = plain_forms[key(form)]
+        plain.evex_flags.extend(e for e in rounding if e not in plain.evex_flags)
+
+    return merged
+
+def add_missing_evex_forms(forms: List[Form]) -> List[Form]:
+    """Forms missing from the Opcodes AVX-512 data: the 128-bit EVEX forms of vbroadcastss"""
+
+    added = list()
+
+    for form in forms:
+        if form.mnemonic == "vbroadcastss" and "F_EVEX" in form.flags and form.kinds[0] == "K_YMM":
+            xmm = copy.deepcopy(form)
+            xmm.kinds[0] = "K_XMM"
+            xmm.operand_types[0] = xmm.operand_types[0].replace("ymm", "xmm")
+            xmm.vector_length = 0
+            added.append(xmm)
+
+    return forms + added
+
+def evex_encoding_order(form: Form) -> tuple:
+    if "F_EVEX" not in form.flags:
+        return (0, 0)
+
+    is_sse2_movq = form.mnemonic == "vmovq" and ((form.opcode == [0x7E] and form.vex_pp == 2) or form.opcode == [0xD6])
+
+    return (form.vex_mmmmm, 0 if is_sse2_movq else 1)
 
 def get_forms() -> List[Form]:
     """
@@ -270,6 +417,8 @@ def get_forms() -> List[Form]:
     of an instruction is the tie-break. It follows llvm-mc:
      - the short al/ax/eax/rax forms come last (add ax, 5 is 66 83 /0 ib rather than 66 05 iw)
      - xchg r, r puts the first operand in ModRM.reg
+     - EVEX encodings of a form: the 0F map first (vpextrw uses 0F C5 rather than 0F3A 15), and
+       vmovq uses the SSE2 movq opcodes (F3 0F 7E, 66 0F D6) rather than the W1 66 0F 6E/7E
     """
 
     forms = list()
@@ -286,11 +435,19 @@ def get_forms() -> List[Form]:
             if instruction.name == "XCHG" and all(op.is_register for op in form.operands):
                 encodings = list(reversed(encodings))
 
+            form_encodings = list()
+
             for encoding in encodings:
                 parsed = parse_encoding(instruction, form, encoding)
 
                 if parsed is not None:
-                    instruction_forms.append(parsed)
+                    fix_opcodes_data(parsed)
+                    form_encodings.append(parsed)
+
+            form_encodings.sort(key=evex_encoding_order)
+            instruction_forms.extend(form_encodings)
+
+        instruction_forms = add_missing_evex_forms(merge_rounding_forms(instruction_forms))
 
         instruction_forms.sort(key=lambda f: len(f.operand_types) > 0 and f.operand_types[0] in ("al", "ax", "eax", "rax"))
 
@@ -303,11 +460,20 @@ def format_form(form: Form) -> str:
     roles = form.roles + [ROLE_NONE] * (4 - len(form.roles))
     opcode = ", ".join(f"0x{b:02X}" for b in form.opcode)
     flags = " | ".join(form.flags) if len(form.flags) > 0 else "0"
-    comment = f"{form.mnemonic} {', '.join(form.operand_types)}".strip()
+    evex_flags = " | ".join(form.evex_flags) if len(form.evex_flags) > 0 else "0"
+    operand_types = list(form.operand_types)
+    rounding = [t for t, e in ROUNDING_OPERANDS.items() if e in form.evex_flags]
+
+    if len(rounding) > 0:
+        imm_index = next((i for i, k in enumerate(form.kinds) if k.startswith("K_IMM")), len(form.kinds))
+        operand_types.insert(imm_index, rounding[0])
+
+    comment = f"{form.mnemonic} {', '.join(operand_types)}".strip()
 
     return (f"    {{ {{ {', '.join(kinds)} }}, ROLES({', '.join(roles)}), {{ {opcode} }}, {len(form.opcode)}, "
             f"{form.modrm}, {flags}, VEX({form.vex_mmmmm}, {form.vex_pp}, {form.vex_commutable}), "
-            f"CPU({form.cpu_flag}) }}, /* {comment} */\n")
+            f"CPU({form.cpu_flag}), EVEX({form.vector_length}, {evex_flags}), {form.disp8_shift} }}, "
+            f"/* {comment} */\n")
 
 def generate_c_file(output_c_file_path: str) -> bool:
     forms = get_forms()
@@ -333,6 +499,7 @@ def generate_c_file(output_c_file_path: str) -> bool:
         f.write("#define ROLES(a, b, c, d) ((uint16_t)((a) | ((b) << 3) | ((c) << 6) | ((d) << 9)))\n")
         f.write("#define VEX(mmmmm, pp, flags) ((uint8_t)((mmmmm) | ((pp) << 5) | ((flags) << 7)))\n")
         f.write("#define CPU(flag) Spasm_x86_64_CPUFlag_##flag\n")
+        f.write("#define EVEX(vector_length, flags) ((uint8_t)((vector_length) | (flags)))\n")
         f.write("\n")
 
         for kind in ["NONE"] + sorted(set(k[2:] for k in OPERAND_KINDS.values())):
@@ -347,8 +514,13 @@ def generate_c_file(output_c_file_path: str) -> bool:
 
         f.write("\n")
 
-        for flag in ("P66", "PF2", "PF3", "REXW", "VEX", "VEXW", "VEXL", "IMMSEXT"):
+        for flag in ("P66", "PF2", "PF3", "W", "VEX", "EVEX", "IMMSEXT"):
             f.write(f"#define F_{flag} Spasm_x86_64_FormFlag_{flag}\n")
+
+        f.write("\n")
+
+        for flag in ("MASK", "ZEROING", "MASKREQ", "BCST", "ER", "SAE"):
+            f.write(f"#define E_{flag} Spasm_x86_64_EvexFlag_{flag}\n")
 
         f.write("\n")
         f.write(f"const Spasm_x86_64_Form spasm_x86_64_forms[{len(forms)}] = {{\n")

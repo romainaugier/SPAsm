@@ -31,7 +31,7 @@ jobs:
         run: |
           cd ext/libromano/ext/concurrentqueue
           ./build_c_api.sh
-          cd ..
+          cd ../..
           ./build.sh --debug --install
 
       - name: Build and test (debug, address sanitizer)

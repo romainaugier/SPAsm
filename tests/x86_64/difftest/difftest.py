@@ -5,8 +5,9 @@
 # All rights reserved.
 
 # Differential test of the x86_64 encoder against llvm-mc.
-# difftest_dump prints "<intel syntax>\t<SPAsm bytes>" for operands generated for every form of the
-# table, llvm-mc assembles the same lines and the bytes must match.
+# difftest_dump prints "<intel syntax>\t<SPAsm bytes or ERROR>" for operands generated for every form
+# of the table, llvm-mc assembles the same lines: the bytes must match, and SPAsm must reject exactly
+# the lines llvm-mc rejects (invalid operand combinations).
 #
 # usage: difftest.py --dump <difftest_dump executable> [--llvm-mc <llvm-mc>] [--known <file>] [--verbose]
 
@@ -84,6 +85,18 @@ def run_llvm_mc(llvm_mc: str, asm_lines: List[str]) -> Tuple[Dict[int, str], Dic
 
     return encodings, errors
 
+def is_known_difference(asm: str, known: Dict[str, str]) -> Optional[str]:
+    """Entries are exact lines, or regular expressions between slashes (/^vaesenc .*/)"""
+
+    if asm in known:
+        return asm
+
+    for entry in known:
+        if len(entry) > 1 and entry.startswith("/") and entry.endswith("/") and re.search(entry[1:-1], asm):
+            return entry
+
+    return None
+
 def read_known_differences(path: Optional[str]) -> Dict[str, str]:
     known = dict()
 
@@ -97,7 +110,7 @@ def read_known_differences(path: Optional[str]) -> Dict[str, str]:
             if line == "" or line.startswith("#"):
                 continue
 
-            asm, _, reason = line.partition("|")
+            asm, _, reason = line.partition(" | ")
             known[asm.strip()] = reason.strip()
 
     return known
@@ -131,27 +144,42 @@ def main() -> int:
 
     mismatches = list()
     spasm_errors = list()
+    spasm_accepted = list()
+    both_rejected = 0
     matches = 0
 
     for i, (asm, spasm_encoding) in enumerate(lines):
         if i in llvm_errors:
+            known = is_known_difference(asm, known_differences)
+
+            if spasm_encoding == "ERROR":
+                both_rejected += 1
+            elif known is not None:
+                used_known_differences.add(known)
+            else:
+                spasm_accepted.append((asm, spasm_encoding, llvm_errors[i]))
+
             continue
 
-        if spasm_encoding == "ERROR":
-            spasm_errors.append((asm, encodings[i]))
-        elif spasm_encoding != encodings[i]:
-            if asm in known_differences:
-                used_known_differences.add(asm)
-            else:
-                mismatches.append((asm, spasm_encoding, encodings[i]))
-        else:
+        known = is_known_difference(asm, known_differences)
+
+        if spasm_encoding == encodings[i]:
             matches += 1
+        elif known is not None:
+            used_known_differences.add(known)
+        elif spasm_encoding == "ERROR":
+            spasm_errors.append((asm, encodings[i]))
+        else:
+            mismatches.append((asm, spasm_encoding, encodings[i]))
 
     for asm, ours, llvm in mismatches:
         print(f"MISMATCH  {asm:<60} spasm={ours} llvm-mc={llvm}")
 
     for asm, llvm in spasm_errors:
         print(f"NOENCODE  {asm:<60} llvm-mc={llvm}")
+
+    for asm, ours, error in spasm_accepted:
+        print(f"ACCEPTED  {asm:<60} spasm={ours} llvm-mc error: {error}")
 
     for asm in known_differences:
         if asm not in used_known_differences:
@@ -163,9 +191,12 @@ def main() -> int:
 
     print(f"{len(lines)} instructions: {matches} match, {len(mismatches)} mismatch, "
           f"{len(used_known_differences)} known differences, {len(spasm_errors)} not encoded by SPAsm, "
-          f"{len(llvm_errors)} rejected by llvm-mc ({llvm_mc})")
+          f"{len(spasm_accepted)} encoded by SPAsm but rejected by llvm-mc, "
+          f"{both_rejected} rejected by both ({llvm_mc})")
 
-    return 0 if len(mismatches) == 0 and len(spasm_errors) == 0 else 1
+    failures = len(mismatches) + len(spasm_errors) + len(spasm_accepted)
+
+    return 0 if failures == 0 else 1
 
 if __name__ == "__main__":
     sys.exit(main())

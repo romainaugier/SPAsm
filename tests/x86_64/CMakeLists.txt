@@ -4,9 +4,7 @@
 
 add_subdirectory(encoding)
 
-if(NOT WIN32)
-    add_subdirectory(difftest)
-endif()
+add_subdirectory(difftest)
 
 if(SPASM_WINDOWS)
     add_subdirectory(windows)

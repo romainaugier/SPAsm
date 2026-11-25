@@ -67,6 +67,11 @@ typedef enum
     Spasm_x86_64_CPUFlag_AVX512CD,
     Spasm_x86_64_CPUFlag_AVX512DQ,
     Spasm_x86_64_CPUFlag_AVX512VL,
+
+    /* AVX-512 extensions outside of x86-64 v4 */
+    Spasm_x86_64_CPUFlag_AVX512IFMA,
+    Spasm_x86_64_CPUFlag_AVX512VBMI,
+    Spasm_x86_64_CPUFlag_AVX512VPOPCNTDQ,
 } Spasm_x86_64_CPUFlag;
 
 /* Operand kinds of the instruction forms, matched against SpasmOperand */
@@ -80,6 +85,8 @@ typedef enum
     Spasm_x86_64_OperandKind_R64,
     Spasm_x86_64_OperandKind_XMM,
     Spasm_x86_64_OperandKind_YMM,
+    Spasm_x86_64_OperandKind_ZMM,
+    Spasm_x86_64_OperandKind_K,
 
     /* Fixed registers, not encoded */
     Spasm_x86_64_OperandKind_AL,
@@ -97,12 +104,15 @@ typedef enum
     Spasm_x86_64_OperandKind_M64,
     Spasm_x86_64_OperandKind_M128,
     Spasm_x86_64_OperandKind_M256,
+    Spasm_x86_64_OperandKind_M512,
 
     /* VSIB memory (gathers), index is a xmm/ymm register */
     Spasm_x86_64_OperandKind_VM32X,
     Spasm_x86_64_OperandKind_VM32Y,
     Spasm_x86_64_OperandKind_VM64X,
     Spasm_x86_64_OperandKind_VM64Y,
+    Spasm_x86_64_OperandKind_VM32Z,
+    Spasm_x86_64_OperandKind_VM64Z,
 
     Spasm_x86_64_OperandKind_IMM8,
     Spasm_x86_64_OperandKind_IMM16,
@@ -135,12 +145,24 @@ typedef enum
     Spasm_x86_64_FormFlag_P66 = 1 << 0,
     Spasm_x86_64_FormFlag_PF2 = 1 << 1,
     Spasm_x86_64_FormFlag_PF3 = 1 << 2,
-    Spasm_x86_64_FormFlag_REXW = 1 << 3,
+    Spasm_x86_64_FormFlag_W = 1 << 3, /* REX.W, VEX.W or EVEX.W */
     Spasm_x86_64_FormFlag_VEX = 1 << 4,
-    Spasm_x86_64_FormFlag_VEXW = 1 << 5,
-    Spasm_x86_64_FormFlag_VEXL = 1 << 6,
-    Spasm_x86_64_FormFlag_IMMSEXT = 1 << 7,
+    Spasm_x86_64_FormFlag_EVEX = 1 << 5,
+    Spasm_x86_64_FormFlag_IMMSEXT = 1 << 6,
 } Spasm_x86_64_FormFlag;
+
+/* Bits 2-7 of Spasm_x86_64_Form.evex, bits 0-1 are the vector length */
+typedef enum
+{
+    Spasm_x86_64_EvexFlag_MASK = 1 << 2,    /* The destination accepts an opmask */
+    Spasm_x86_64_EvexFlag_ZEROING = 1 << 3, /* The destination accepts {z} */
+    Spasm_x86_64_EvexFlag_MASKREQ = 1 << 4, /* The opmask is required (gathers, scatters) */
+    Spasm_x86_64_EvexFlag_BCST = 1 << 5,    /* The memory operand can broadcast, 64-bit elements if W */
+    Spasm_x86_64_EvexFlag_ER = 1 << 6,      /* Accepts an embedded rounding operand ({rn-sae}...) */
+    Spasm_x86_64_EvexFlag_SAE = 1 << 7,     /* Accepts a suppress-all-exceptions operand ({sae}) */
+} Spasm_x86_64_EvexFlag;
+
+#define SPASM_X86_64_VECTOR_LENGTH_MASK 0x3
 
 #define SPASM_X86_64_MODRM_NONE 0xFF
 #define SPASM_X86_64_MODRM_REG 0x08
@@ -149,7 +171,7 @@ typedef enum
 #define SPASM_X86_64_VEX_COMMUTABLE 0x80
 
 /*
-    One encoding of an instruction form (14 bytes). Forms of a mnemonic are contiguous in
+    One encoding of an instruction form (16 bytes). Forms of a mnemonic are contiguous in
     spasm_x86_64_forms, the mnemonic itself only lives in the gperf mnemonic table
 */
 typedef struct
@@ -160,8 +182,10 @@ typedef struct
     uint8_t opcode_len;
     uint8_t modrm; /* SPASM_X86_64_MODRM_NONE, SPASM_X86_64_MODRM_REG or the /digit */
     uint8_t flags;
-    uint8_t vex; /* mmmmm in bits 0-4, pp in bits 5-6, SPASM_X86_64_VEX_COMMUTABLE */
+    uint8_t vex; /* VEX/EVEX map in bits 0-4, pp in bits 5-6, SPASM_X86_64_VEX_COMMUTABLE */
     uint8_t cpu_flag;
+    uint8_t evex; /* VEX.L or EVEX.L'L in bits 0-1, Spasm_x86_64_EvexFlag */
+    uint8_t disp8_shift; /* EVEX compressed disp8: the displacement is scaled by 1 << disp8_shift */
 } Spasm_x86_64_Form;
 
 #define SPASM_X86_64_FORM_ROLE(form, i) ((Spasm_x86_64_OperandRole)(((form)->roles >> (3 * (i))) & 0x7))
@@ -188,6 +212,8 @@ SPASM_API const Spasm_x86_64_MnemonicKeyword* spasm_x86_64_mnemonic_at(size_t i,
 SPASM_API extern const Spasm_x86_64_Form spasm_x86_64_forms[];
 
 SPASM_API extern const size_t spasm_x86_64_forms_count;
+
+SPASM_API const char* spasm_x86_64_get_register_as_string(SpasmRegister reg);
 
 SPASM_API bool spasm_x86_64_encode_instruction(SpasmInstruction* instr,
                                                SpasmByteCode* out);

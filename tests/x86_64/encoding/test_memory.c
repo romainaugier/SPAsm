@@ -17,6 +17,11 @@
 #define RIP SpasmRegister_x86_64_RIP
 #define EAX SpasmRegister_x86_64_EAX
 #define NONE SpasmRegister_x86_64_NONE
+#define EBX SpasmRegister_x86_64_EBX
+#define ECX SpasmRegister_x86_64_ECX
+#define ESP SpasmRegister_x86_64_ESP
+#define R13D SpasmRegister_x86_64_R13D
+#define EIP SpasmRegister_x86_64_EIP
 
 typedef struct
 {
@@ -61,6 +66,14 @@ int main(void)
         { "mov", SpasmOpReg(EAX), SpasmOpMemory(RBX, NONE, -129, 1), { 0x8B, 0x83, 0x7F, 0xFF, 0xFF, 0xFF }, 6 },
         /* add qword ptr [rax], 5 */
         { "add", SpasmOpMemQword(RAX, NONE, 0, 1), SpasmOpImm32(5), { 0x48, 0x83, 0x00, 0x05 }, 4 },
+        /* 32-bit addressing: 67 prefix, same ModRM/SIB rules */
+        { "lea", SpasmOpReg(EAX), SpasmOpMemory(EBX, ECX, 0, 2), { 0x67, 0x8D, 0x04, 0x4B }, 4 },
+        { "mov", SpasmOpReg(EAX), SpasmOpMemory(ESP, NONE, 0, 1), { 0x67, 0x8B, 0x04, 0x24 }, 4 },
+        { "mov", SpasmOpReg(EAX), SpasmOpMemory(R13D, NONE, 0, 1), { 0x67, 0x41, 0x8B, 0x45, 0x00 }, 5 },
+        { "mov", SpasmOpReg(RAX), SpasmOpMemory(EIP, NONE, 64, 1),
+          { 0x67, 0x48, 0x8B, 0x05, 0x40, 0x00, 0x00, 0x00 }, 8 },
+        { "mov", SpasmOpReg(RAX), SpasmOpMemory(NONE, ECX, 16, 4),
+          { 0x67, 0x48, 0x8B, 0x04, 0x8D, 0x10, 0x00, 0x00, 0x00 }, 9 },
         /* lea rax, [rsp + r12 * 8] */
         { "lea", SpasmOpReg(RAX), SpasmOpMemory(RSP, R12, 0, 8), { 0x4A, 0x8D, 0x04, 0xE4 }, 4 },
     };
@@ -76,6 +89,14 @@ int main(void)
 
     /* rip-relative cannot have an index */
     assemble_and_expect_failure("mov", SpasmOpReg(RAX), SpasmOpMemory(RIP, RCX, 0, 1));
+
+    /* Mixed address sizes */
+    assemble_and_expect_failure("mov", SpasmOpReg(RAX), SpasmOpMemory(RAX, ECX, 0, 2));
+    assemble_and_expect_failure("mov", SpasmOpReg(RAX), SpasmOpMemory(EBX, RCX, 0, 2));
+
+    /* eip-relative cannot have an index, esp cannot be an index */
+    assemble_and_expect_failure("mov", SpasmOpReg(RAX), SpasmOpMemory(EIP, ECX, 0, 1));
+    assemble_and_expect_failure("mov", SpasmOpReg(RAX), SpasmOpMemory(EBX, ESP, 0, 1));
 
     /* Invalid scale */
     assemble_and_expect_failure("mov", SpasmOpReg(RAX), SpasmOpMemory(RAX, RCX, 0, 3));

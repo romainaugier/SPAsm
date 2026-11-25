@@ -39,6 +39,18 @@ static const MemVariant mem_variants[] = {
     { SpasmRegister_x86_64_R13, SpasmRegister_x86_64_R12, 2, 0 },
     { SpasmRegister_x86_64_R12, SpasmRegister_x86_64_R15, 1, -128 },
     { SpasmRegister_x86_64_RSP, SpasmRegister_x86_64_RAX, 1, 127 },
+    /* 32-bit addressing (67 prefix) */
+    { SpasmRegister_x86_64_EAX, SpasmRegister_x86_64_NONE, 1, 0 },
+    { SpasmRegister_x86_64_ESP, SpasmRegister_x86_64_NONE, 1, 0x100 },
+    { SpasmRegister_x86_64_R13D, SpasmRegister_x86_64_NONE, 1, 0 },
+    { SpasmRegister_x86_64_EBP, SpasmRegister_x86_64_ECX, 4, -8 },
+    { SpasmRegister_x86_64_R9D, SpasmRegister_x86_64_R12D, 8, 0x12345 },
+    { SpasmRegister_x86_64_EIP, SpasmRegister_x86_64_NONE, 1, 0x40 },
+    { SpasmRegister_x86_64_NONE, SpasmRegister_x86_64_ECX, 2, 0x10 },
+    /* Invalid: mixed address sizes, eip with an index */
+    { SpasmRegister_x86_64_RAX, SpasmRegister_x86_64_ECX, 2, 0 },
+    { SpasmRegister_x86_64_EAX, SpasmRegister_x86_64_RCX, 1, 8 },
+    { SpasmRegister_x86_64_EIP, SpasmRegister_x86_64_ECX, 1, 0 },
 };
 
 static const MemVariant vsib_variants[] = {
@@ -47,11 +59,15 @@ static const MemVariant vsib_variants[] = {
     { SpasmRegister_x86_64_RSP, 1, 1, 0 },
     { SpasmRegister_x86_64_R13, 15, 2, 0x400 },
     { SpasmRegister_x86_64_RBP, 0, 4, 0 },
+    { SpasmRegister_x86_64_EAX, 3, 4, 8 },
+    { SpasmRegister_x86_64_RAX, 20, 4, 64 },
+    { SpasmRegister_x86_64_R12, 31, 8, -256 },
 };
 
+/* Neighbours are used together: sil/bh, bh/r9b and ah/r15b are invalid combinations */
 static const SpasmRegister r8_variants[] = {
-    SpasmRegister_x86_64_CL, SpasmRegister_x86_64_SIL, SpasmRegister_x86_64_R9B,
-    SpasmRegister_x86_64_AL, SpasmRegister_x86_64_R15B, SpasmRegister_x86_64_DL,
+    SpasmRegister_x86_64_CL, SpasmRegister_x86_64_SIL, SpasmRegister_x86_64_BH, SpasmRegister_x86_64_R9B,
+    SpasmRegister_x86_64_AL, SpasmRegister_x86_64_AH, SpasmRegister_x86_64_R15B, SpasmRegister_x86_64_DL,
 };
 
 static const SpasmRegister r16_variants[] = {
@@ -69,9 +85,17 @@ static const SpasmRegister r64_variants[] = {
     SpasmRegister_x86_64_RAX, SpasmRegister_x86_64_R12, SpasmRegister_x86_64_RSP,
 };
 
-static const uint8_t vector_variants[] = { 1, 9, 0, 15, 4, 12 };
+/* 16-31 need EVEX: legacy forms reject them, VEX ones fall back to their EVEX twin */
+static const uint8_t vector_variants[] = { 1, 9, 0, 15, 4, 12, 17, 31 };
 
-static const int64_t imm8_variants[] = { 5, -3, 0x7F, 1, -128, 0x40 };
+static const SpasmRegister k_variants[] = {
+    SpasmRegister_x86_64_K1, SpasmRegister_x86_64_K2, SpasmRegister_x86_64_K7,
+    SpasmRegister_x86_64_K0, SpasmRegister_x86_64_K5, SpasmRegister_x86_64_K3,
+};
+
+static const char* rounding_names[] = { "{rn-sae}", "{rd-sae}", "{ru-sae}", "{rz-sae}", "{sae}" };
+
+static const int64_t imm8_variants[] = { 5, -3, 0x7F, 1, -128, 0x40, 200 };
 static const int64_t imm16_variants[] = { 0x1234, -2, 5, 0x7FFF, -300, 0x100 };
 static const int64_t imm32_variants[] = { 0x12345678, -0x1000, 5, -1, 0x7FFFFFFF, 0x80 };
 static const int64_t imm64_variants[] = { 0x1122334455667788LL, 5, -2, 0x100000000LL, 0x7FFFFFFF, -0x80000001LL };
@@ -79,55 +103,58 @@ static const int64_t imm64_variants[] = { 0x1122334455667788LL, 5, -2, 0x1000000
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 #define VARIANT(array, i) (array[(i) % ARRAY_SIZE(array)])
 
+static uint32_t variants_size(Spasm_x86_64_OperandKind kind)
+{
+    switch(kind)
+    {
+        case Spasm_x86_64_OperandKind_R8: return (uint32_t)ARRAY_SIZE(r8_variants);
+        case Spasm_x86_64_OperandKind_XMM:
+        case Spasm_x86_64_OperandKind_YMM:
+        case Spasm_x86_64_OperandKind_ZMM:
+            return (uint32_t)ARRAY_SIZE(vector_variants);
+        case Spasm_x86_64_OperandKind_VM32Z:
+        case Spasm_x86_64_OperandKind_VM64Z:
+        case Spasm_x86_64_OperandKind_IMM8: return (uint32_t)ARRAY_SIZE(imm8_variants);
+        case Spasm_x86_64_OperandKind_VM32X:
+        case Spasm_x86_64_OperandKind_VM32Y:
+        case Spasm_x86_64_OperandKind_VM64X:
+        case Spasm_x86_64_OperandKind_VM64Y:
+            return (uint32_t)ARRAY_SIZE(vsib_variants);
+        case Spasm_x86_64_OperandKind_M:
+        case Spasm_x86_64_OperandKind_M8:
+        case Spasm_x86_64_OperandKind_M16:
+        case Spasm_x86_64_OperandKind_M32:
+        case Spasm_x86_64_OperandKind_M64:
+        case Spasm_x86_64_OperandKind_M128:
+        case Spasm_x86_64_OperandKind_M256:
+        case Spasm_x86_64_OperandKind_M512:
+            return (uint32_t)ARRAY_SIZE(mem_variants);
+        default:
+            return 6;
+    }
+}
+
 /* Enough operand sets to go through every variant of every operand of the form */
 static uint32_t variants_count(const Spasm_x86_64_Form* form)
 {
-    uint32_t count = 6;
+    uint32_t count = 0;
 
-    for(uint32_t i = 0; i < 4; i++)
+    for(uint32_t i = 0; i < 4 && form->operands[i] != Spasm_x86_64_OperandKind_NONE; i++)
     {
-        switch(form->operands[i])
-        {
-            case Spasm_x86_64_OperandKind_M:
-            case Spasm_x86_64_OperandKind_M8:
-            case Spasm_x86_64_OperandKind_M16:
-            case Spasm_x86_64_OperandKind_M32:
-            case Spasm_x86_64_OperandKind_M64:
-            case Spasm_x86_64_OperandKind_M128:
-            case Spasm_x86_64_OperandKind_M256:
-                count = count > ARRAY_SIZE(mem_variants) ? count : (uint32_t)ARRAY_SIZE(mem_variants);
-                break;
-            default:
-                break;
-        }
+        const uint32_t size = variants_size((Spasm_x86_64_OperandKind)form->operands[i]);
+        count = size > count ? size : count;
     }
 
-    return count;
-}
+    /* The rounding operand is on every third variant, go through the 4 modes with each mask variant */
+    if((form->evex & Spasm_x86_64_EvexFlag_ER) && count < 24)
+        count = 24;
 
-static const char* gp_names[4][16] = {
-    { "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil",
-      "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b" },
-    { "ax", "cx", "dx", "bx", "sp", "bp", "si", "di",
-      "r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w" },
-    { "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi",
-      "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d" },
-    { "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
-      "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" },
-};
+    return count > 0 ? count : 1;
+}
 
 static size_t format_register(SpasmRegister reg, char* buf, size_t buf_sz)
 {
-    if(reg == SpasmRegister_x86_64_RIP)
-        return (size_t)snprintf(buf, buf_sz, "rip");
-
-    const uint32_t group = (uint32_t)(reg - SpasmRegister_x86_64_AL) / 16;
-    const uint32_t code = (uint32_t)(reg - SpasmRegister_x86_64_AL) % 16;
-
-    if(group < 4)
-        return (size_t)snprintf(buf, buf_sz, "%s", gp_names[group][code]);
-
-    return (size_t)snprintf(buf, buf_sz, "%s%u", group == 4 ? "xmm" : "ymm", code);
+    return (size_t)snprintf(buf, buf_sz, "%s", spasm_x86_64_get_register_as_string(reg));
 }
 
 static const char* memory_size_prefix(Spasm_x86_64_OperandKind kind)
@@ -140,6 +167,7 @@ static const char* memory_size_prefix(Spasm_x86_64_OperandKind kind)
         case Spasm_x86_64_OperandKind_M64: return "qword ptr ";
         case Spasm_x86_64_OperandKind_M128: return "xmmword ptr ";
         case Spasm_x86_64_OperandKind_M256: return "ymmword ptr ";
+        case Spasm_x86_64_OperandKind_M512: return "zmmword ptr ";
         default: return "";
     }
 }
@@ -154,6 +182,7 @@ static uint8_t memory_size(Spasm_x86_64_OperandKind kind)
         case Spasm_x86_64_OperandKind_M64: return 8;
         case Spasm_x86_64_OperandKind_M128: return 16;
         case Spasm_x86_64_OperandKind_M256: return 32;
+        case Spasm_x86_64_OperandKind_M512: return 64;
         default: return 0;
     }
 }
@@ -242,6 +271,10 @@ static bool generate_operand(Spasm_x86_64_OperandKind kind,
         case Spasm_x86_64_OperandKind_YMM:
             *op = make_register(SpasmRegister_x86_64_YMM0 + VARIANT(vector_variants, variant));
             break;
+        case Spasm_x86_64_OperandKind_ZMM:
+            *op = make_register(SpasmRegister_x86_64_ZMM0 + VARIANT(vector_variants, variant));
+            break;
+        case Spasm_x86_64_OperandKind_K: *op = make_register(VARIANT(k_variants, variant)); break;
         case Spasm_x86_64_OperandKind_AL: *op = make_register(SpasmRegister_x86_64_AL); break;
         case Spasm_x86_64_OperandKind_AX: *op = make_register(SpasmRegister_x86_64_AX); break;
         case Spasm_x86_64_OperandKind_EAX: *op = make_register(SpasmRegister_x86_64_EAX); break;
@@ -256,6 +289,7 @@ static bool generate_operand(Spasm_x86_64_OperandKind kind,
         case Spasm_x86_64_OperandKind_M64:
         case Spasm_x86_64_OperandKind_M128:
         case Spasm_x86_64_OperandKind_M256:
+        case Spasm_x86_64_OperandKind_M512:
         {
             const MemVariant* mem = &VARIANT(mem_variants, variant);
             *op = make_memory(mem, mem->index, memory_size(kind));
@@ -267,10 +301,15 @@ static bool generate_operand(Spasm_x86_64_OperandKind kind,
         case Spasm_x86_64_OperandKind_VM64X:
         case Spasm_x86_64_OperandKind_VM32Y:
         case Spasm_x86_64_OperandKind_VM64Y:
+        case Spasm_x86_64_OperandKind_VM32Z:
+        case Spasm_x86_64_OperandKind_VM64Z:
         {
             const bool is_ymm = kind == Spasm_x86_64_OperandKind_VM32Y || kind == Spasm_x86_64_OperandKind_VM64Y;
+            const bool is_zmm = kind == Spasm_x86_64_OperandKind_VM32Z || kind == Spasm_x86_64_OperandKind_VM64Z;
             const MemVariant* mem = &VARIANT(vsib_variants, variant);
-            const SpasmRegister index = (is_ymm ? SpasmRegister_x86_64_YMM0 : SpasmRegister_x86_64_XMM0) + mem->index;
+            const SpasmRegister index = (is_zmm ? SpasmRegister_x86_64_ZMM0 :
+                                         is_ymm ? SpasmRegister_x86_64_YMM0 :
+                                                  SpasmRegister_x86_64_XMM0) + mem->index;
             *op = make_memory(mem, index, 0);
             format_memory(op, kind, text, text_sz);
             return true;
@@ -295,6 +334,62 @@ static bool generate_operand(Spasm_x86_64_OperandKind kind,
     return true;
 }
 
+/*
+    Opmask on the destination of the forms accepting one: none, {k1}, {k7} {z} and {k0}. {k0} is
+    not a write mask, zeroing is only valid on registers and gathers/scatters need a mask: those
+    must be rejected by both sides
+*/
+static void apply_mask(const Spasm_x86_64_Form* form, uint32_t variant, SpasmOperand* op, char* text, size_t text_sz)
+{
+    if(!(form->evex & Spasm_x86_64_EvexFlag_MASK))
+        return;
+
+    const size_t sz = strlen(text);
+
+    switch(variant % 4)
+    {
+        case 1:
+            op->mask = SpasmRegister_x86_64_K1;
+            snprintf(text + sz, text_sz - sz, " {k1}");
+            break;
+        case 2:
+            op->mask = SpasmRegister_x86_64_K7;
+            op->zeroing = (form->evex & Spasm_x86_64_EvexFlag_ZEROING) != 0;
+            snprintf(text + sz, text_sz - sz, op->zeroing ? " {k7} {z}" : " {k7}");
+            break;
+        case 3:
+            op->mask = SpasmRegister_x86_64_K0;
+            snprintf(text + sz, text_sz - sz, " {k0}");
+            break;
+        default:
+            break;
+    }
+}
+
+/* Every other variant of the forms with a broadcast memory operand uses one broadcast element */
+static void apply_broadcast(const Spasm_x86_64_Form* form,
+                            uint32_t variant,
+                            Spasm_x86_64_OperandKind kind,
+                            SpasmOperand* op,
+                            char* text,
+                            size_t text_sz)
+{
+    if(!(form->evex & Spasm_x86_64_EvexFlag_BCST) || op->type != SpasmOperandType_Mem || variant % 2 == 0)
+        return;
+
+    const uint8_t element_size = (form->flags & Spasm_x86_64_FormFlag_W) ? 8 : 4;
+
+    op->mem_broadcast = (uint8_t)(memory_size(kind) / element_size);
+    op->mem_size = element_size;
+
+    const size_t sz = format_memory(op,
+                                    element_size == 4 ? Spasm_x86_64_OperandKind_M32 : Spasm_x86_64_OperandKind_M64,
+                                    text,
+                                    text_sz);
+
+    snprintf(text + sz, text_sz - sz, "{1to%u}", (uint32_t)(memory_size(kind) / element_size));
+}
+
 int main(void)
 {
     for(size_t m = 0; m < spasm_x86_64_mnemonics_count(); m++)
@@ -310,8 +405,8 @@ int main(void)
 
             for(uint32_t v = 0; v < num_variants; v++)
             {
-                SpasmOperand operands[4];
-                char texts[4][96];
+                SpasmOperand operands[5];
+                char texts[5][96];
                 uint8_t num_operands = 0;
                 bool supported = true;
 
@@ -328,11 +423,59 @@ int main(void)
                 if(!supported)
                     break;
 
+                for(uint8_t i = 0; i < num_operands; i++)
+                    apply_broadcast(form, v, (Spasm_x86_64_OperandKind)form->operands[i], &operands[i],
+                                    texts[i], sizeof(texts[i]));
+
+                if(num_operands > 0)
+                    apply_mask(form, v, &operands[0], texts[0], sizeof(texts[0]));
+
+                /* Every third variant of the forms accepting it has a rounding operand, before the imm8 */
+                if((form->evex & (Spasm_x86_64_EvexFlag_ER | Spasm_x86_64_EvexFlag_SAE)) && v % 3 == 1)
+                {
+                    uint8_t position = 0;
+
+                    while(position < num_operands && form->operands[position] != Spasm_x86_64_OperandKind_IMM8)
+                        position++;
+
+                    for(uint8_t i = num_operands; i > position; i--)
+                    {
+                        operands[i] = operands[i - 1];
+                        memcpy(texts[i], texts[i - 1], sizeof(texts[i]));
+                    }
+
+                    memset(&operands[position], 0, sizeof(SpasmOperand));
+                    operands[position].type = SpasmOperandType_Rounding;
+                    operands[position].imm_value = (form->evex & Spasm_x86_64_EvexFlag_ER) ? (int64_t)((v / 3 + v / 12) % 4) :
+                                                                                             SpasmRounding_SAE;
+                    snprintf(texts[position], sizeof(texts[position]), "%s", rounding_names[operands[position].imm_value]);
+                    num_operands++;
+                }
+
+                /* llvm-mc wants the rounding operand before a general purpose source (vcvtsi2ss) */
+                uint8_t text_order[5] = { 0, 1, 2, 3, 4 };
+
+                for(uint8_t i = 1; i < num_operands; i++)
+                {
+                    if(operands[i].type == SpasmOperandType_Rounding &&
+                       operands[i - 1].type == SpasmOperandType_Register &&
+                       operands[i - 1].reg >= SpasmRegister_x86_64_EAX &&
+                       operands[i - 1].reg <= SpasmRegister_x86_64_R15)
+                    {
+                        text_order[i - 1] = i;
+                        text_order[i] = i - 1;
+                    }
+                }
+
                 char line[512];
                 size_t line_sz = (size_t)snprintf(line, sizeof(line), "%s", name);
 
                 for(uint8_t i = 0; i < num_operands; i++)
-                    line_sz += (size_t)snprintf(line + line_sz, sizeof(line) - line_sz, "%s%s", i == 0 ? " " : ", ", texts[i]);
+                    line_sz += (size_t)snprintf(line + line_sz,
+                                                sizeof(line) - line_sz,
+                                                "%s%s",
+                                                i == 0 ? " " : ", ",
+                                                texts[text_order[i]]);
 
                 SpasmInstruction instr;
                 instr.mnemonic = name;
