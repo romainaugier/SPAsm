@@ -1,6 +1,16 @@
 # SPAsm 
 
-Super Powerful Assembler library and application.
+**S**uper **P**owerful **Asm**(sem)bler.
+
+SPAsm is the assembler and object/executable generation layer of the **S**uper **P**owerful compiler trilogy toolchain.
+
+| Library | Role |
+|---------|------|
+| [SPIROU](https://github.com/romainaugier/SPIROU) | Target-independent IR and optimizations |
+| [SPLICE](https://github.com/roaminaugier/SPLICE) | Machine IR, instruction selection, register allocation |
+| **[SPAsm](https://github.com/romainaugier/SPAsm)** | Encoding and object files |
+
+SPAsm does not depend on SPLICE: any library can assemble code directly.
 
 ## Application
 
@@ -137,6 +147,10 @@ Tests assert in debug builds only. When python3 and `llvm-mc` are found, the `x8
 encodes generated operands for every form of the x86_64 table and compares the bytes with
 `llvm-mc --show-encoding`. Equivalent encodings that differ on purpose are listed in
 `tests/x86_64/difftest/known_differences.txt`.
+
+## License
+
+BSD-3-Clause, see [LICENSE](LICENSE).
 
 ## Disclaimer
 
